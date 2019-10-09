@@ -5,8 +5,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.*
 
 @RestController
-class QueryController {
-    @RequestMapping(method = [RequestMethod.GET], value = ["/"], produces = ["application/json"])
+class ApiController {
+    @RequestMapping(method = [RequestMethod.GET], value = ["/api/v1/word"], produces = ["application/json"])
     fun query(@RequestParam(value = "q") query: String): Array<Entry> {
         return database.query("SELECT kanj.txt           kanji,\n" +
                 "       tforms.forms       forms,\n" +
