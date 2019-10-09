@@ -8,28 +8,14 @@ import org.springframework.web.bind.annotation.*
 class QueryController {
     @RequestMapping(method = [RequestMethod.GET], value = ["/"], produces = ["application/json"])
     fun query(@RequestParam(value = "q") query: String): Array<Entry> {
-        return queryJapanese(query)
-    }
-
-    fun queryEnglish(query: String): Array<Entry> {
-        val response = mutableListOf<Entry>()
-
-        val kanji = database.query("SELECT entr, txt FROM kanj WHERE entr IN (SELECT entr FROM gloss WHERE txt LIKE ?);", query.replace('*', '%'))
-
-        //for (k in kanji)
-        //    response.add(Entry(k.get("txt"), database.query("SELECT txt FROM gloss WHERE lang = 1 AND entr = ?", k.get("entr")).map { it.get<String>("txt") }.toTypedArray()))
-
-        return response.toTypedArray()
-    }
-
-    fun queryJapanese(query: String): Array<Entry> {
-        val response = mutableListOf<Entry>()
-
-        val kanji = database.query("SELECT kanj.entr entry, kanj.txt kanji, rdng.txt reading from kanj inner join rdng using (entr) WHERE (SELECT src FROM entr WHERE id = entr) = 1 AND (kanj.txt LIKE ? OR rdng.txt LIKE ?)", query.replace('*', '%'), query.replace('*', '%'))
-        for (k in kanji)
-            response.add(Entry(k.get("kanji"), k.get("reading"), database.query("SELECT txt FROM gloss WHERE lang = 1 AND entr = ?", k.get("entry")).map { it.get<String>("txt") }.toTypedArray()))
-
-        return response.toTypedArray()
+        return database.query("SELECT kanj.entr entry, kanj.txt kanji, treading.txt reading, array_agg(tforms.txt) forms, array_agg(tglossary.txt) glossary FROM kanj\n" +
+                "    INNER JOIN rdng treading ON (kanj.entr = treading.entr AND treading.rdng = 1)\n" +
+                "    LEFT JOIN gloss tglossary ON (kanj.entr = tglossary.entr AND lang = 1)\n" +
+                "    LEFT JOIN rdng tforms ON (kanj.entr = tforms.entr AND tforms.rdng > 1)\n" +
+                "WHERE (SELECT src FROM entr WHERE id = kanj.entr) = 1 AND (kanj.txt LIKE ? OR tglossary.txt LIKE ?)\n" +
+                "GROUP BY entry, kanji, reading", query.replace('*', '%'), query.replace('*', '%'))
+                .map { Entry(it.get("kanji"), it.get("reading"), it.get<java.sql.Array>("forms").array as Array<String?>, it.get<java.sql.Array>("glossary").array as Array<String?>) }
+                .toTypedArray()
     }
 
     @ExceptionHandler(MissingServletRequestParameterException::class)
