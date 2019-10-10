@@ -6,20 +6,47 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 class ApiController {
-    @RequestMapping(method = [RequestMethod.GET], value = ["/api/v1/word"], produces = ["application/json"])
-    fun query(@RequestParam(value = "q") query: String): Array<Entry> {
-        return database.query("SELECT kanj.txt           kanji,\n" +
-                "       tforms.forms       forms,\n" +
-                "       tglossary.glossary glossary\n" +
-                "FROM kanj\n" +
-                "         JOIN (SELECT entr, array_agg(rdng), array_agg(txt ORDER BY rdng) AS forms FROM rdng GROUP BY 1) tforms\n" +
-                "              ON tforms.entr = kanj.entr\n" +
-                "         JOIN (SELECT entr, array_agg(txt) AS glossary FROM gloss GROUP BY 1) tglossary ON tglossary.entr = kanj.entr\n" +
-                "WHERE (SELECT src FROM entr WHERE id = kanj.entr) = 1\n" +
-                "  AND (kanj.txt LIKE ? OR lower(?) ILIKE ANY(glossary))\n" +
-                "GROUP BY kanji, tforms.forms, tglossary.glossary;", query.replace('*', '%'), query.replace('*', '%'))
-                .map { Entry(it.get("kanji"), it.get<java.sql.Array>("forms").array as Array<String>, it.get<java.sql.Array>("glossary").array as Array<String>) }
-                .toTypedArray()
+    @RequestMapping(method = [RequestMethod.GET], value = ["/api/v1/word/{word}"], produces = ["application/json"])
+    fun query(@PathVariable("word") query: String): Array<Entry> {
+        val word = query.replace('*', '%')
+
+        val entry = database.query("SELECT id, kanji.kanji, reading.reading\n" +
+                "FROM entr\n" +
+                "         LEFT JOIN (SELECT entr, array_agg(txt ORDER BY kanj) kanji FROM kanj GROUP BY entr) kanji\n" +
+                "                   ON kanji.entr = entr.id\n" +
+                "         LEFT JOIN (SELECT entr, array_agg(txt ORDER BY rdng) reading FROM rdng GROUP BY entr) reading\n" +
+                "                   ON reading.entr = entr.id\n" +
+                "WHERE src = 1\n" +
+                "  AND (id = ANY (SELECT entr FROM rdng WHERE txt ILIKE ?)\n" +
+                "    OR id = ANY (SELECT entr FROM kanj WHERE txt ILIKE ?)\n" +
+                "    OR id = ANY (SELECT entr FROM gloss WHERE txt ILIKE ?));", word, word, word)
+        val sense = database.query("SELECT sense.entr entry, gloss.gloss, pos.kw, fld.fld\n" +
+                "FROM sens sense\n" +
+                "         LEFT JOIN (SELECT entr, sens, array_agg((SELECT kw FROM kwpos WHERE id = pos.kw)) kw\n" +
+                "                    FROM pos\n" +
+                "                    GROUP BY entr, sens) pos ON pos.entr = sense.entr AND pos.sens = sense.sens\n" +
+                "         LEFT JOIN (SELECT entr, sens, array_agg((SELECT descr FROM kwfld WHERE id = fld.kw)) fld\n" +
+                "                    FROM fld\n" +
+                "                    GROUP BY entr, sens) fld ON fld.entr = sense.entr AND fld.sens = sense.sens\n" +
+                "         LEFT JOIN (SELECT entr, sens, array_agg(txt) gloss FROM gloss GROUP BY entr, sens) gloss\n" +
+                "                   ON gloss.entr = sense.entr AND gloss.sens = sense.sens\n" +
+                "WHERE sense.entr = ANY (?);", entry.map { it.get<Long>("id") }.toLongArray())
+
+        return entry.map { row ->
+            Entry(
+                    row.get<java.sql.Array>("kanji")?.array as Array<String>?,
+                    row.get<java.sql.Array>("reading")?.array as Array<String>?,
+                    sense
+                            .filter { it.get<Int>("entry") == row.get<Int>("id") }
+                            .map {
+                                Sense(
+                                    it.get<java.sql.Array>("gloss")?.array as Array<String>?,
+                                    it.get<java.sql.Array>("kw")?.array as Array<String>?,
+                                    it.get<java.sql.Array>("fld")?.array as Array<String>?
+                                )
+                            }
+                            .toTypedArray())
+        }.toTypedArray()
     }
 
     @ExceptionHandler(MissingServletRequestParameterException::class)

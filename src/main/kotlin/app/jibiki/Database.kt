@@ -5,6 +5,7 @@ import com.zaxxer.hikari.pool.HikariPool
 import org.intellij.lang.annotations.Language
 import java.sql.ResultSet
 import java.sql.ResultSetMetaData
+import java.sql.SQLException
 
 class Database {
     private val pool = HikariPool(HikariConfig().apply {
@@ -19,10 +20,7 @@ class Database {
         pool.connection.use { connection ->
             connection.prepareStatement(sql).use { statement ->
                 args.forEachIndexed { index, arg ->
-                    when (arg) {
-                        is String -> statement.setString(index + 1, arg)
-                        is Int -> statement.setInt(index + 1, arg)
-                    }
+                    statement.setObject(index + 1, arg)
                 }
 
                 val rows = mutableListOf<Row>()
@@ -30,8 +28,16 @@ class Database {
                 while (set.next()) {
                     val row = Row()
                     val md = set.metaData
-                    for (i in 1..md.columnCount)
-                        row.addColumn(md.getColumnName(i), set.getObject(i))
+                    for (i in 1..md.columnCount) {
+                        var column: Any? = null
+                        try {
+                            column = set.getObject(i)
+                        } catch (exception: SQLException) {
+
+                        }
+
+                        row.addColumn(md.getColumnName(i), column)
+                    }
                     rows.add(row)
                 }
                 return rows
