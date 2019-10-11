@@ -1,47 +1,26 @@
 package app.jibiki
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.pool.HikariPool
-import org.intellij.lang.annotations.Language
-import java.sql.ResultSet
-import java.sql.ResultSetMetaData
-import java.sql.SQLException
+import com.moji4j.MojiConverter
+import com.moji4j.MojiDetector
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.r2dbc.core.DatabaseClient
+import org.springframework.stereotype.Repository
+import reactor.core.publisher.Flux
 
+@Repository
 class Database {
-    private val pool = HikariPool(HikariConfig().apply {
-        jdbcUrl = "jdbc:postgresql://localhost/jmdict"
-        username = "postgres"
-        password = ""
-        maximumPoolSize = 10
-        poolName = "Jibiki Connection Pool"
-    })
+    @Autowired
+    lateinit var client: DatabaseClient
 
-    fun query(@Language("PostgreSQL") sql: String, vararg args: Any): List<Row> {
-        pool.connection.use { connection ->
-            connection.prepareStatement(sql).use { statement ->
-                args.forEachIndexed { index, arg ->
-                    statement.setObject(index + 1, arg)
-                }
+    fun getEntries(word: String): Flux<Int> {
+        val detector = MojiDetector()
+        val converter = MojiConverter()
 
-                val rows = mutableListOf<Row>()
-                val set = statement.executeQuery()
-                while (set.next()) {
-                    val row = Row()
-                    val md = set.metaData
-                    for (i in 1..md.columnCount) {
-                        var column: Any? = null
-                        try {
-                            column = set.getObject(i)
-                        } catch (exception: SQLException) {
-
-                        }
-
-                        row.addColumn(md.getColumnName(i), column)
-                    }
-                    rows.add(row)
-                }
-                return rows
-            }
+        return when {
+            detector.hasKanji(word) -> client.execute().sql("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE $1 LIMIT 50;").bind(1, word).map { row, _ -> row["entr"] as Int }.all()
+            detector.hasKana(word) -> client.execute().sql("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE $1 LIMIT 50;").bind(1, word).map { row, _ -> row["entr"] as Int }.all()
+            else -> client.execute().sql("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE $1 LIMIT 50;").bind(1, converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
+                    .switchIfEmpty(client.execute().sql("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE $1 LIMIT 50;").bind(1, word).map { row, _ -> row["entr"] as Int }.all())
         }
     }
 }
