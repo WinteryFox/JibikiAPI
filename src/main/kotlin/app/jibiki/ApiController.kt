@@ -20,17 +20,19 @@ class ApiController {
                 "  AND (id = ANY (SELECT entr FROM rdng WHERE txt ILIKE ?)\n" +
                 "    OR id = ANY (SELECT entr FROM kanj WHERE txt ILIKE ?)\n" +
                 "    OR id = ANY (SELECT entr FROM gloss WHERE txt ILIKE ?));", word, word, word)
-        val sense = database.query("SELECT sense.entr entry, gloss.gloss, pos.kw, fld.fld\n" +
-                "FROM sens sense\n" +
-                "         LEFT JOIN (SELECT entr, sens, array_agg((SELECT kw FROM kwpos WHERE id = pos.kw)) kw\n" +
-                "                    FROM pos\n" +
-                "                    GROUP BY entr, sens) pos ON pos.entr = sense.entr AND pos.sens = sense.sens\n" +
-                "         LEFT JOIN (SELECT entr, sens, array_agg((SELECT descr FROM kwfld WHERE id = fld.kw)) fld\n" +
-                "                    FROM fld\n" +
-                "                    GROUP BY entr, sens) fld ON fld.entr = sense.entr AND fld.sens = sense.sens\n" +
-                "         LEFT JOIN (SELECT entr, sens, array_agg(txt) gloss FROM gloss GROUP BY entr, sens) gloss\n" +
-                "                   ON gloss.entr = sense.entr AND gloss.sens = sense.sens\n" +
-                "WHERE sense.entr = ANY (?);", entry.map { it.get<Long>("id") }.toLongArray())
+        val sense = database.query("SELECT s.entr                                   entry,\n" +
+                "       s.sens                                   sense,\n" +
+                "       STRING_AGG(DISTINCT kwpos.kw, ',')    as pos,\n" +
+                "       STRING_AGG(DISTINCT kwfld.descr, ',') as fld,\n" +
+                "       STRING_AGG(g.txt, ',')                as gloss\n" +
+                "FROM sens s\n" +
+                "         LEFT JOIN pos p ON p.entr = s.entr AND p.sens = s.sens\n" +
+                "         LEFT JOIN kwpos ON kwpos.id = p.kw\n" +
+                "         LEFT JOIN fld f ON f.entr = s.entr AND f.sens = s.sens\n" +
+                "         LEFT JOIN kwfld ON kwfld.id = f.kw\n" +
+                "         LEFT JOIN gloss g ON g.entr = s.entr AND g.sens = s.sens\n" +
+                "WHERE s.entr = ANY (?)\n" +
+                "GROUP BY s.entr, s.sens;", entry.map { it.get<Long>("id") }.toLongArray())
 
         return entry.map { row ->
             Entry(
