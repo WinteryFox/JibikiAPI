@@ -1,7 +1,8 @@
 package app.jibiki
 
 data class Entry(
-        val kanji: Array<String>?,
+        val id: Long,
+        val kanji: String,
         val readings: Array<String>?,
-        val sense: Array<Sense>?
+        val senses: Array<Sense>?
 )

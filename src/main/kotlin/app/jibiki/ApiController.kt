@@ -15,17 +15,22 @@ class ApiController {
         val detector = MojiDetector()
         val converter = MojiConverter()
         val entries = when {
-            detector.hasKanji(query) -> database.query("SELECT entr FROM kanj WHERE txt ILIKE ?", word)
-            detector.hasKana(query) -> database.query("SELECT entr FROM rdng WHERE txt ILIKE ?", word)
+            detector.hasKanji(query) -> database.query("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE ? LIMIT 50;", word)
+            detector.hasKana(query) -> database.query("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE ? LIMIT 50;", word)
             else -> {
-                val kana = database.query("SELECT entr FROM rdng WHERE txt ILIKE ?", converter.convertRomajiToHiragana(word))
+                val kana = database.query("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE ? LIMIT 50;", converter.convertRomajiToHiragana(word))
                 if (kana.isNotEmpty())
                     kana
                 else
-                    database.query("SELECT entr FROM gloss WHERE txt ILIKE ?", word)
+                    database.query("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE ? LIMIT 50;", word)
             }
         }
 
+        val kanji = database.query("SELECT kanj.entr, kanj.txt kanji, ARRAY_AGG(rdng.txt) readings\n" +
+                "FROM kanj\n" +
+                "         LEFT JOIN rdng ON rdng.entr = kanj.entr\n" +
+                "WHERE kanj.entr = ANY (?)\n" +
+                "GROUP BY kanj.entr, kanj.txt LIMIT 50;", entries.map { it.get<Long>("entr") }.toLongArray())
         val sense = database.query("SELECT s.entr                                   entry,\n" +
                 "       s.sens                                   sense,\n" +
                 "       ARRAY_AGG(DISTINCT kwpos.kw)    as pos,\n" +
@@ -38,12 +43,13 @@ class ApiController {
                 "         LEFT JOIN kwfld ON kwfld.id = f.kw\n" +
                 "         LEFT JOIN gloss g ON g.entr = s.entr AND g.sens = s.sens\n" +
                 "WHERE s.entr = ANY (?)\n" +
-                "GROUP BY s.entr, s.sens;", entries.map { it.get<Long>("entr") }.toLongArray())
+                "GROUP BY s.entr, s.sens LIMIT 50;", entries.map { it.get<Long>("entr") }.toLongArray())
 
-        return entries.map { row ->
+        return kanji.map { row ->
             Entry(
-                    row.get<java.sql.Array>("kanji")?.array as Array<String>?,
-                    row.get<java.sql.Array>("reading")?.array as Array<String>?,
+                    row.get("entr"),
+                    row.get("kanji"),
+                    row.get<java.sql.Array>("readings")?.array as Array<String>?,
                     sense
                             .filter { it.get<Int>("entry") == row.get<Int>("entr") }
                             .map {
