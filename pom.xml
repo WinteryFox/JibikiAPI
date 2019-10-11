@@ -62,6 +62,11 @@
             <artifactId>HikariCP</artifactId>
             <version>3.4.1</version>
         </dependency>
+        <dependency>
+            <groupId>com.andree-surya</groupId>
+            <artifactId>moji4j</artifactId>
+            <version>1.0.0</version>
+        </dependency>
     </dependencies>
 
     <build>
