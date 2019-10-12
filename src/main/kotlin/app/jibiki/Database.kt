@@ -10,17 +10,64 @@ import reactor.core.publisher.Flux
 @Repository
 class Database {
     @Autowired
-    lateinit var client: DatabaseClient
+    private lateinit var client: DatabaseClient
 
-    fun getEntries(word: String): Flux<Int> {
+    fun getEntriesForWord(word: String): Flux<Int> {
         val detector = MojiDetector()
         val converter = MojiConverter()
 
         return when {
-            detector.hasKanji(word) -> client.execute().sql("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE $1 LIMIT 50;").bind(1, word).map { row, _ -> row["entr"] as Int }.all()
-            detector.hasKana(word) -> client.execute().sql("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE $1 LIMIT 50;").bind(1, word).map { row, _ -> row["entr"] as Int }.all()
-            else -> client.execute().sql("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE $1 LIMIT 50;").bind(1, converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
-                    .switchIfEmpty(client.execute().sql("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE $1 LIMIT 50;").bind(1, word).map { row, _ -> row["entr"] as Int }.all())
+            detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+            detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+            else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
+                    .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
         }
+    }
+
+    fun getEntries(ids: List<Int>): Flux<Entry> {
+        return client.execute("SELECT kanj.entr, kanj.txt kanji, ARRAY_AGG(rdng.txt) readings\n" +
+                "FROM kanj\n" +
+                "         LEFT JOIN rdng ON rdng.entr = kanj.entr\n" +
+                "WHERE kanj.entr = ANY (:ids)\n" +
+                "GROUP BY kanj.entr, kanj.txt\n" +
+                "LIMIT 50")
+                .bind("ids", ids.toTypedArray())
+                .fetch()
+                .all()
+                .zipWith(getSenses(ids).collectList())
+                .map {
+                    Entry(
+                            it.t1["entr"] as Int,
+                            it.t1["kanji"] as String,
+                            it.t1["readings"] as Array<String>,
+                            it.t2.toTypedArray()
+                    )
+                }
+    }
+
+    fun getSenses(entries: List<Int>): Flux<Sense> {
+        return client.execute("SELECT s.entr                             entry,\n" +
+                "       s.sens                             sense,\n" +
+                "       ARRAY_AGG(DISTINCT kwpos.kw)    as pos,\n" +
+                "       ARRAY_AGG(DISTINCT kwfld.descr) as fld,\n" +
+                "       ARRAY_AGG(g.txt)                as gloss\n" +
+                "FROM sens s\n" +
+                "         LEFT JOIN pos p ON p.entr = s.entr AND p.sens = s.sens\n" +
+                "         LEFT JOIN kwpos ON kwpos.id = p.kw\n" +
+                "         LEFT JOIN fld f ON f.entr = s.entr AND f.sens = s.sens\n" +
+                "         LEFT JOIN kwfld ON kwfld.id = f.kw\n" +
+                "         LEFT JOIN gloss g ON g.entr = s.entr AND g.sens = s.sens\n" +
+                "WHERE s.entr = ANY (:entries)\n" +
+                "GROUP BY s.entr, s.sens\n" +
+                "LIMIT 50")
+                .bind("entries", entries.toTypedArray())
+                .map { row, _ ->
+                    Sense(
+                            row["gloss"] as Array<String>,
+                            row["pos"] as Array<String>,
+                            row["fld"] as Array<String>
+                    )
+                }
+                .all()
     }
 }
