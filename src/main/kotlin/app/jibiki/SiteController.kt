@@ -1,7 +1,6 @@
 package app.jibiki
 
 import org.springframework.stereotype.Controller
-import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.RequestMapping
 import reactor.core.publisher.Flux
 
@@ -10,7 +9,7 @@ class SiteController(
         private val database: Database
 ) {
     @RequestMapping(value = ["/"])
-    fun index(model: Model): Flux<Int> {
+    fun index(): Flux<Int> {
         return database.getEntriesForWord("hello")
     }
 }
