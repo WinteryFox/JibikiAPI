@@ -34,18 +34,21 @@ class Database {
                 .bind("ids", ids.toTypedArray())
                 .fetch()
                 .all()
-                .zipWith(getSenses(ids).collectList())
-                .map {
-                    Entry(
-                            it.t1["entr"] as Int,
-                            it.t1["kanji"] as String,
-                            it.t1["readings"] as Array<String>,
-                            it.t2.toTypedArray()
-                    )
+                .flatMap { row ->
+                    getSenses(row["entr"] as Int)
+                            .collectList()
+                            .map {
+                                Entry(
+                                        row["entr"] as Int,
+                                        row["kanji"] as String,
+                                        row["readings"] as Array<String>,
+                                        it.toTypedArray()
+                                )
+                            }
                 }
     }
 
-    fun getSenses(entries: List<Int>): Flux<Sense> {
+    fun getSenses(entry: Int): Flux<Sense> {
         return client.execute("SELECT s.entr                             entry,\n" +
                 "       s.sens                             sense,\n" +
                 "       ARRAY_AGG(DISTINCT kwpos.kw)    as pos,\n" +
@@ -57,10 +60,10 @@ class Database {
                 "         LEFT JOIN fld f ON f.entr = s.entr AND f.sens = s.sens\n" +
                 "         LEFT JOIN kwfld ON kwfld.id = f.kw\n" +
                 "         LEFT JOIN gloss g ON g.entr = s.entr AND g.sens = s.sens\n" +
-                "WHERE s.entr = ANY (:entries)\n" +
+                "WHERE s.entr = :entry\n" +
                 "GROUP BY s.entr, s.sens\n" +
                 "LIMIT 50")
-                .bind("entries", entries.toTypedArray())
+                .bind("entry", entry)
                 .map { row, _ ->
                     Sense(
                             row["gloss"] as Array<String>,
