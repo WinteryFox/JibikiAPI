@@ -7,7 +7,7 @@ import reactor.core.publisher.Flux
 class ApiController(
         private val database: Database
 ) {
-    @RequestMapping(method = [RequestMethod.GET], value = ["/api/v1/word"], produces = ["application/json"])
+    @RequestMapping(method = [RequestMethod.GET], value = ["/word"], produces = ["application/json"])
     fun wordSearch(@RequestParam("q") query: String): Flux<Entry> {
         val word = query.replace('*', '%')
 
