@@ -16,16 +16,24 @@ class Database {
         val detector = MojiDetector()
         val converter = MojiConverter()
 
-        return when {
-            detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-            detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-            else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
-                    .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
-        }
+        return if (word.contains('%'))
+            when {
+                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
+                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
+            }
+        else
+            when {
+                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt = :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
+                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
+            }
     }
 
     fun getEntries(ids: List<Int>): Flux<Entry> {
-        return client.execute("SELECT kanj.entr, kanj.txt kanji, ARRAY_AGG(rdng.txt) readings\n" +
+        return client.execute("SELECT kanj.entr, kanj.txt kanji, ARRAY_AGG(rdng.txt ORDER BY rdng.rdng) readings\n" +
                 "FROM kanj\n" +
                 "         LEFT JOIN rdng ON rdng.entr = kanj.entr\n" +
                 "WHERE kanj.entr = ANY (:ids)\n" +
@@ -49,11 +57,11 @@ class Database {
     }
 
     fun getSenses(entry: Int): Flux<Sense> {
-        return client.execute("SELECT s.entr                             entry,\n" +
-                "       s.sens                             sense,\n" +
-                "       ARRAY_AGG(DISTINCT kwpos.kw)    as pos,\n" +
-                "       ARRAY_AGG(DISTINCT kwfld.descr) as fld,\n" +
-                "       ARRAY_AGG(g.txt)                as gloss\n" +
+        return client.execute("SELECT s.entr                                     as entry,\n" +
+                "       s.sens                                     as sense,\n" +
+                "       ARRAY_AGG(DISTINCT kwpos.kw)               as pos,\n" +
+                "       ARRAY_AGG(DISTINCT kwfld.descr)            as fld,\n" +
+                "       ARRAY_AGG(DISTINCT g.txt) as gloss\n" +
                 "FROM sens s\n" +
                 "         LEFT JOIN pos p ON p.entr = s.entr AND p.sens = s.sens\n" +
                 "         LEFT JOIN kwpos ON kwpos.id = p.kw\n" +
