@@ -13,7 +13,6 @@ class ApiController(
         val word = query.replace('*', '%')
 
         return database.getEntriesForWord(word)
-                .collectList()
-                .flatMapMany { database.getEntries(it) }
+                .flatMap { database.getEntry(it) }
     }
 }
