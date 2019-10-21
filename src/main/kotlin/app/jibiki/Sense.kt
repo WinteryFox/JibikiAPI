@@ -5,6 +5,7 @@ data class Sense(
         val pos: Array<String>,
         val pos_info: Array<String>,
         val fld: Array<String>,
+        val fld_info: Array<String>,
         val notes: String?,
         val misc: String?
 )

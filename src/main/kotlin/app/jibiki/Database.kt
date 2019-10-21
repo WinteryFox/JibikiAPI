@@ -19,19 +19,19 @@ class Database {
 
         return if (word.contains('%'))
             when {
-                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
-                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
+                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
+                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
+                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
             }
         else
             when {
-                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt = :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
-                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
+                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
+                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
+                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
+                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
             }
     }
 
@@ -84,9 +84,10 @@ class Database {
         return client.execute("SELECT sense.notes,\n" +
                 "       pos.pos,\n" +
                 "       pos.pos_info,\n" +
-                "       fld.fld_info fld,\n" +
-                "       gloss.txt    gloss,\n" +
-                "       misc.descr   misc\n" +
+                "       fld.fld,\n" +
+                "       fld.fld_info,\n" +
+                "       gloss.txt  gloss,\n" +
+                "       misc.descr misc\n" +
                 "FROM sens sense\n" +
                 "         LEFT JOIN (SELECT pos.entr, pos.sens, ARRAY_AGG(kwpos.kw) pos, ARRAY_AGG(kwpos.descr) pos_info\n" +
                 "                    FROM pos\n" +
@@ -111,6 +112,7 @@ class Database {
                             row["pos"] as Array<String>? ?: emptyArray(),
                             row["pos_info"] as Array<String>? ?: emptyArray(),
                             row["fld"] as Array<String>? ?: emptyArray(),
+                            row["fld_info"] as Array<String>? ?: emptyArray(),
                             row["notes"] as String?,
                             row["misc"] as String?
                     )
