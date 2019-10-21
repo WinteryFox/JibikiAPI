@@ -19,6 +19,7 @@ class Database {
 
         return if (word.contains('%'))
             when {
+                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
                 detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
                 detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
                 else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt ILIKE :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
@@ -26,6 +27,7 @@ class Database {
             }
         else
             when {
+                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE txt ILIKE :word LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
                 detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
                 detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt = :word LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
                 else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE txt = :word LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
@@ -63,14 +65,15 @@ class Database {
                 "         LEFT JOIN rinf ON rinf.entr = entr.id AND rinf.rdng = rdng.rdng\n" +
                 "         LEFT JOIN kwrinf ON kwrinf.id = rinf.kw\n" +
                 "WHERE entr.id = :id\n" +
-                "GROUP BY entr.id, kanj.txt, kwkinf.descr, rdng.txt, kwrinf.descr\n" +
+                "GROUP BY entr.id, kanj.kanj, rdng.rdng, kanj.txt, kwkinf.descr, rdng.txt, kwrinf.descr\n" +
+                "ORDER BY kanj.kanj, rdng.rdng\n" +
                 "LIMIT 50")
                 .bind("id", entry)
                 .map { row ->
                     Form(
                             row["kanji"] as String?,
                             row["kanji_info"] as String?,
-                            row["reading"] as String,
+                            row["reading"] as String?,
                             row["reading_info"] as String?
                     )
                 }
@@ -78,33 +81,38 @@ class Database {
     }
 
     fun getSensesForEntry(entry: Int): Flux<Sense> {
-        return client.execute("SELECT s.entr                                               entry,\n" +
-                "       s.sens                                               sense,\n" +
-                "       s.notes                                              notes,\n" +
-                "       ARRAY_REMOVE(ARRAY_AGG(DISTINCT kwpos.kw), NULL)     pos,\n" +
-                "       ARRAY_REMOVE(ARRAY_AGG(DISTINCT kwfld.descr), NULL)  fld,\n" +
-                "       ARRAY_REMOVE(ARRAY_AGG(DISTINCT kwmisc.descr), NULL) misc,\n" +
-                "       ARRAY_AGG(DISTINCT g.txt)                            gloss\n" +
-                "FROM sens s\n" +
-                "         LEFT JOIN pos p ON p.entr = s.entr AND p.sens = s.sens\n" +
-                "         LEFT JOIN kwpos ON kwpos.id = p.kw\n" +
-                "         LEFT JOIN fld f ON f.entr = s.entr AND f.sens = s.sens\n" +
-                "         LEFT JOIN kwfld ON kwfld.id = f.kw\n" +
-                "         LEFT JOIN misc ON misc.entr = s.entr AND misc.sens = s.sens\n" +
-                "         LEFT JOIN kwmisc ON kwmisc.id = misc.kw\n" +
-                "         LEFT JOIN gloss g ON g.entr = s.entr AND g.sens = s.sens AND g.lang = 1\n" +
-                "WHERE s.entr = :entry\n" +
-                "GROUP BY s.entr, s.sens\n" +
-                "ORDER BY s.sens\n" +
-                "LIMIT 50")
+        return client.execute("SELECT sense.notes,\n" +
+                "       pos.pos,\n" +
+                "       pos.pos_info,\n" +
+                "       fld.fld_info fld,\n" +
+                "       gloss.txt    gloss,\n" +
+                "       misc.descr   misc\n" +
+                "FROM sens sense\n" +
+                "         LEFT JOIN (SELECT pos.entr, pos.sens, ARRAY_AGG(kwpos.kw) pos, ARRAY_AGG(kwpos.descr) pos_info\n" +
+                "                    FROM pos\n" +
+                "                             JOIN kwpos ON pos.kw = kwpos.id\n" +
+                "                    GROUP BY pos.entr, pos.sens) pos ON pos.entr = sense.entr AND pos.sens = sense.sens\n" +
+                "         LEFT JOIN (SELECT fld.entr, fld.sens, ARRAY_AGG(kwfld.kw) fld, ARRAY_AGG(kwfld.descr) fld_info\n" +
+                "                    FROM fld\n" +
+                "                             JOIN kwfld ON fld.kw = kwfld.id\n" +
+                "                    GROUP BY fld.entr, fld.sens) fld ON fld.entr = sense.entr AND fld.sens = sense.sens\n" +
+                "         LEFT JOIN (SELECT gloss.entr, gloss.sens, ARRAY_AGG(gloss.txt) txt\n" +
+                "                    FROM gloss\n" +
+                "                    GROUP BY gloss.entr, gloss.sens) gloss ON gloss.entr = sense.entr AND gloss.sens = sense.sens\n" +
+                "         LEFT JOIN (SELECT misc.entr, misc.sens, kwmisc.descr\n" +
+                "                    FROM misc\n" +
+                "                             LEFT JOIN kwmisc ON misc.kw = kwmisc.id) misc\n" +
+                "                   ON misc.entr = sense.entr AND misc.sens = sense.sens\n" +
+                "WHERE sense.entr = :entry")
                 .bind("entry", entry)
                 .map { row, _ ->
                     Sense(
-                            row["gloss"] as Array<String>,
-                            row["pos"] as Array<String>,
-                            row["fld"] as Array<String>,
+                            row["gloss"] as Array<String>? ?: emptyArray(),
+                            row["pos"] as Array<String>? ?: emptyArray(),
+                            row["pos_info"] as Array<String>? ?: emptyArray(),
+                            row["fld"] as Array<String>? ?: emptyArray(),
                             row["notes"] as String?,
-                            row["misc"] as Array<String>
+                            row["misc"] as String?
                     )
                 }
                 .all()
