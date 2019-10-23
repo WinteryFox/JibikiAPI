@@ -13,6 +13,53 @@ class Database {
     @Autowired
     private lateinit var client: DatabaseClient
 
+    fun getKanji(kanji: String): Flux<Kanji> {
+        return client
+                .execute("SELECT character.id,\n" +
+                        "       character.literal,\n" +
+                        "       meaning.meaning,\n" +
+                        "       kunyomi.reading kunyomi,\n" +
+                        "       onyomi.reading  onyomi,\n" +
+                        "       misc.grade,\n" +
+                        "       misc.stroke_count,\n" +
+                        "       misc.frequency,\n" +
+                        "       misc.jlpt,\n" +
+                        "       misc.radical_name\n" +
+                        "FROM character\n" +
+                        "         LEFT JOIN (SELECT character, ARRAY_AGG(meaning) meaning\n" +
+                        "                    FROM meaning\n" +
+                        "                    WHERE language = 'en'\n" +
+                        "                    GROUP BY meaning.character) meaning\n" +
+                        "                   ON character.id = meaning.character\n" +
+                        "         LEFT JOIN (SELECT character, ARRAY_AGG(reading) reading\n" +
+                        "                    FROM reading\n" +
+                        "                    WHERE type = 'ja_kun'\n" +
+                        "                    GROUP BY character) kunyomi\n" +
+                        "                   ON character.id = kunyomi.character\n" +
+                        "         LEFT JOIN (SELECT character, ARRAY_AGG(reading) reading\n" +
+                        "                    FROM reading\n" +
+                        "                    WHERE type = 'ja_on'\n" +
+                        "                    GROUP BY character) onyomi ON character.id = onyomi.character\n" +
+                        "         LEFT JOIN miscellaneous misc on character.id = misc.character\n" +
+                        "WHERE literal = :kanji")
+                .bind("kanji", kanji)
+                .map { row, _ ->
+                    Kanji(
+                            row["id"] as Short,
+                            row["literal"] as String,
+                            row["meaning"] as Array<String>,
+                            row["kunyomi"] as Array<String>,
+                            row["onyomi"] as Array<String>,
+                            row["grade"] as Int?,
+                            row["stroke_count"] as Int,
+                            row["frequency"] as Int?,
+                            row["jlpt"] as Int?,
+                            row["radical_name"] as String?
+                    )
+                }
+                .all()
+    }
+
     fun getEntriesForWord(word: String): Flux<Int> {
         val detector = MojiDetector()
         val converter = MojiConverter()
@@ -35,14 +82,14 @@ class Database {
             }
     }
 
-    fun getEntry(id: Int): Mono<Entry> {
+    fun getEntry(id: Int): Mono<Word> {
         return getKanjisForEntry(id)
                 .collectList()
                 .flatMap { kanjis ->
                     getSensesForEntry(id)
                             .collectList()
                             .map {
-                                Entry(
+                                Word(
                                         id,
                                         kanjis.toTypedArray(),
                                         it.toTypedArray()
