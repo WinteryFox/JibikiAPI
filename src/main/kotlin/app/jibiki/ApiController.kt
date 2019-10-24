@@ -2,6 +2,7 @@ package app.jibiki
 
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 
 @CrossOrigin
 @RestController
@@ -17,7 +18,7 @@ class ApiController(
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/kanji"], produces = ["application/json"])
-    fun kanjiSearch(@RequestParam("q") query: String): Flux<Kanji> {
+    fun kanjiSearch(@RequestParam("q") query: String): Mono<Kanji> {
         return database.getKanji(query)
     }
 }
