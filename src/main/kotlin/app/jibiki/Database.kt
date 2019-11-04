@@ -13,7 +13,7 @@ class Database {
     @Autowired
     private lateinit var client: DatabaseClient
 
-    fun getKanji(kanji: String): Mono<Kanji> {
+    fun getKanji(kanji: String): Flux<Kanji> {
         return client
                 .execute("SELECT character.id,\n" +
                         "       character.literal,\n" +
@@ -57,7 +57,7 @@ class Database {
                             row["radical_name"] as String?
                     )
                 }
-                .first()
+                .all()
     }
 
     fun getEntriesForWord(word: String): Flux<Int> {
