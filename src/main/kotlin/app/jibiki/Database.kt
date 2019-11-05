@@ -41,15 +41,16 @@ class Database {
                         "                    WHERE type = 'ja_on'\n" +
                         "                    GROUP BY character) onyomi ON character.id = onyomi.character\n" +
                         "         LEFT JOIN miscellaneous misc on character.id = misc.character\n" +
-                        "WHERE literal = :kanji")
+                        "WHERE literal = :kanji\n" +
+                        "LIMIT 50")
                 .bind("kanji", kanji)
                 .map { row, _ ->
                     Kanji(
                             row["id"] as Short,
                             row["literal"] as String,
                             row["meaning"] as Array<String>,
-                            row["kunyomi"] as Array<String>?,
-                            row["onyomi"] as Array<String>?,
+                            row["kunyomi"] as Array<String>? ?: emptyArray(),
+                            row["onyomi"] as Array<String>? ?: emptyArray(),
                             row["grade"] as Int?,
                             row["stroke_count"] as Int,
                             row["frequency"] as Int?,
