@@ -2,10 +2,8 @@ package app.jibiki
 
 data class Sense(
         val gloss: Array<String>,
-        val pos: Array<String>,
-        val pos_info: Array<String>,
-        val fld: Array<String>,
-        val fld_info: Array<String>,
+        val pos: Array<PartOfSpeech>,
+        val fld: Array<FieldOfUse>,
         val notes: String?,
         val misc: String?
 )

@@ -7,6 +7,8 @@ import org.springframework.data.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.util.function.Tuple2
+import kotlin.streams.toList
 
 @Repository
 class Database {
@@ -157,10 +159,24 @@ class Database {
                 .map { row, _ ->
                     Sense(
                             row["gloss"] as Array<String>? ?: emptyArray(),
-                            row["pos"] as Array<String>? ?: emptyArray(),
-                            row["pos_info"] as Array<String>? ?: emptyArray(),
-                            row["fld"] as Array<String>? ?: emptyArray(),
-                            row["fld_info"] as Array<String>? ?: emptyArray(),
+                            (row["pos"] as Array<String>? ?: emptyArray())
+                                    .toList()
+                                    .zip(row["pos_info"] as Array<String>? ?: emptyArray())
+                                    .stream()
+                                    .map {
+                                        PartOfSpeech(it.first, it.second)
+                                    }
+                                    .toList()
+                                    .toTypedArray(),
+                            (row["fld"] as Array<String>? ?: emptyArray())
+                                    .toList()
+                                    .zip(row["fld_info"] as Array<String>? ?: emptyArray())
+                                    .stream()
+                                    .map {
+                                        FieldOfUse(it.first, it.second)
+                                    }
+                                    .toList()
+                                    .toTypedArray(),
                             row["notes"] as String?,
                             row["misc"] as String?
                     )

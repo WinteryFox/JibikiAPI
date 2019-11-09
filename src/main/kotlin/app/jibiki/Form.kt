@@ -2,7 +2,7 @@ package app.jibiki
 
 data class Form(
         val kanji: String?,
-        val kanji_info: String?,
+        val kanjiInfo: String?,
         val reading: String?,
-        val reading_info: String?
+        val readingInfo: String?
 )
