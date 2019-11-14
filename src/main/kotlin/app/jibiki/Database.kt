@@ -15,6 +15,20 @@ class Database {
     @Autowired
     private lateinit var client: DatabaseClient
 
+    fun getSentences(query: String): Flux<Sentence> {
+        return client
+                .execute("SELECT * FROM sentences, plainto_tsquery(:query) q WHERE (lang='eng' OR lang='jpn') AND tsv @@ q")
+                .bind("query", query)
+                .map { row ->
+                    Sentence(
+                            row["id"] as Int,
+                            row["lang"] as String?,
+                            row["sentence"] as String
+                    )
+                }
+                .all()
+    }
+
     fun getKanji(kanji: String): Flux<Kanji> {
         return client
                 .execute("SELECT character.id,\n" +
