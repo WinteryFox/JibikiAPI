@@ -7,7 +7,6 @@ import org.springframework.data.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
-import reactor.util.function.Tuple2
 import kotlin.streams.toList
 
 @Repository
