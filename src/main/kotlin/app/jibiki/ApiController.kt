@@ -15,9 +15,7 @@ class ApiController(
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
     fun wordSearch(@RequestParam("q") query: String): Flux<Word> {
-        val word = query.replace('*', '%')
-
-        return database.getEntriesForWord(word)
+        return database.getEntriesForWord(query)
                 .flatMap { database.getEntry(it) }
     }
 

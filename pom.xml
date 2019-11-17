@@ -25,7 +25,6 @@
             <artifactId>moji4j</artifactId>
             <version>1.0.0</version>
         </dependency>
-
         <dependency>
             <groupId>org.springframework.boot.experimental</groupId>
             <artifactId>spring-boot-starter-data-r2dbc</artifactId>
@@ -86,6 +85,11 @@
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.atilika.kuromoji</groupId>
+            <artifactId>kuromoji-unidic</artifactId>
+            <version>0.9.0</version>
         </dependency>
     </dependencies>
 

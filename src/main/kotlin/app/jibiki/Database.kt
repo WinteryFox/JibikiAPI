@@ -1,7 +1,7 @@
 package app.jibiki
 
+import com.atilika.kuromoji.unidic.Tokenizer
 import com.moji4j.MojiConverter
-import com.moji4j.MojiDetector
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
@@ -13,6 +13,8 @@ import kotlin.streams.toList
 class Database {
     @Autowired
     private lateinit var client: DatabaseClient
+    private val tokenizer = Tokenizer()
+    private val converter = MojiConverter()
 
     fun getSentences(query: String): Flux<SentenceBundle> {
         return client
@@ -34,7 +36,7 @@ LIMIT 50
                 .fetch()
                 .all()
                 .flatMap { row ->
-                    getTranslations(row["translations"] as Array<Int>)
+                    getTranslations(row["translations"] as Array<Int>, row["lang"] as String)
                             .collectList()
                             .filter { it.isNotEmpty() }
                             .map {
@@ -50,7 +52,7 @@ LIMIT 50
                 }
     }
 
-    fun getTranslations(ids: Array<Int>): Flux<Sentence> {
+    fun getTranslations(ids: Array<Int>, sourceLanguage: String): Flux<Sentence> {
         if (ids.isEmpty())
             return Flux.empty()
 
@@ -58,9 +60,10 @@ LIMIT 50
                 .execute("""
 SELECT s.id, s.lang, s.sentence
 FROM sentences s
-WHERE s.id = ANY (:ids) AND (s.lang = 'jpn' OR s.lang='eng')
+WHERE s.id = ANY (:ids) AND (s.lang = 'jpn' OR s.lang='eng') AND (s.lang != :source)
                 """)
                 .bind("ids", ids)
+                .bind("source", sourceLanguage)
                 .map { row ->
                     Sentence(
                             row["id"] as Int,
@@ -122,25 +125,32 @@ LIMIT 50
     }
 
     fun getEntriesForWord(word: String): Flux<Int> {
-        val detector = MojiDetector()
-        val converter = MojiConverter()
+        val exact = !word.contains('*').or(word.contains('＊'))
+        val equals = if (exact) "=" else "LIKE"
+        val query = word.replace('*', '%').replace('＊', '%')
 
-        return if (word.contains('%'))
-            when {
-                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
-                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
-            }
-        else
-            when {
-                word.startsWith('"').and(word.endsWith('"')) -> client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) ILIKE LOWER(:word) LIMIT 50").bind("word", word.replace("\"", "")).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKanji(word) -> client.execute("SELECT DISTINCT entr FROM kanj WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                detector.hasKana(word) -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all()
-                else -> client.execute("SELECT DISTINCT entr FROM rdng WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", converter.convertRomajiToHiragana(word)).map { row, _ -> row["entr"] as Int }.all()
-                        .switchIfEmpty(client.execute("SELECT DISTINCT entr FROM gloss WHERE LOWER(txt) = LOWER(:word) LIMIT 50").bind("word", word).map { row, _ -> row["entr"] as Int }.all())
-            }
+        return client
+                .execute("""
+SELECT entr
+FROM kanj
+WHERE lower(txt) $equals lower(:q)
+UNION ALL
+SELECT entr
+FROM rdng
+WHERE txt $equals hiragana(:reading)
+   OR txt $equals katakana(:reading)
+UNION ALL
+SELECT entr
+FROM gloss
+WHERE lower(txt) $equals lower(:q)
+                """)
+                .bind("q", query)
+                .bind("reading", converter.convertRomajiToHiragana(query))
+                .fetch()
+                .all()
+                .map { row ->
+                    row["entr"] as Int
+                }
     }
 
     fun getEntry(id: Int): Mono<Word> {
