@@ -8,12 +8,12 @@ import reactor.core.publisher.Flux
 class ApiController(
         private val database: Database
 ) {
-    @RequestMapping(method = [RequestMethod.GET], value = ["/sentence"], produces = ["application/json"])
-    fun sentenceSearch(@RequestParam("q") query: String): Flux<Sentence> {
+    @RequestMapping(method = [RequestMethod.GET], value = ["/sentences"], produces = ["application/json"])
+    fun sentenceSearch(@RequestParam("q") query: String): Flux<SentenceBundle> {
         return database.getSentences(query)
     }
 
-    @RequestMapping(method = [RequestMethod.GET], value = ["/word"], produces = ["application/json"])
+    @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
     fun wordSearch(@RequestParam("q") query: String): Flux<Word> {
         val word = query.replace('*', '%')
 

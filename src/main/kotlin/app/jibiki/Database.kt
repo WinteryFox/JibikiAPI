@@ -14,14 +14,57 @@ class Database {
     @Autowired
     private lateinit var client: DatabaseClient
 
-    fun getSentences(query: String): Flux<Sentence> {
+    fun getSentences(query: String): Flux<SentenceBundle> {
         return client
-                .execute("SELECT * FROM sentences, plainto_tsquery(:query) q WHERE (lang='eng' OR lang='jpn') AND tsv @@ q")
-                .bind("query", query)
+                .execute("""
+SELECT s.id,
+       s.lang,
+       s.sentence,
+       array_remove(array_agg(l.translation), NULL) translations
+FROM sentences s
+         LEFT JOIN plainto_tsquery('japanese', :q) q ON TRUE
+         LEFT JOIN ts_rank_cd(s.tsv, q) score ON TRUE
+         LEFT JOIN links l ON l.source = s.id
+WHERE s.tsv @@ q AND (s.lang = 'jpn' OR s.lang='eng')
+GROUP BY s.id, q, score
+ORDER BY score DESC
+LIMIT 50
+                """)
+                .bind("q", query)
+                .fetch()
+                .all()
+                .flatMap { row ->
+                    getTranslations(row["translations"] as Array<Int>)
+                            .collectList()
+                            .filter { it.isNotEmpty() }
+                            .map {
+                                SentenceBundle(
+                                        Sentence(
+                                                row["id"] as Int,
+                                                row["lang"] as String,
+                                                row["sentence"] as String
+                                        ),
+                                        it
+                                )
+                            }
+                }
+    }
+
+    fun getTranslations(ids: Array<Int>): Flux<Sentence> {
+        if (ids.isEmpty())
+            return Flux.empty()
+
+        return client
+                .execute("""
+SELECT s.id, s.lang, s.sentence
+FROM sentences s
+WHERE s.id = ANY (:ids) AND (s.lang = 'jpn' OR s.lang='eng')
+                """)
+                .bind("ids", ids)
                 .map { row ->
                     Sentence(
                             row["id"] as Int,
-                            row["lang"] as String?,
+                            row["lang"] as String,
                             row["sentence"] as String
                     )
                 }
@@ -30,34 +73,36 @@ class Database {
 
     fun getKanji(kanji: String): Flux<Kanji> {
         return client
-                .execute("SELECT character.id,\n" +
-                        "       character.literal,\n" +
-                        "       meaning.meaning,\n" +
-                        "       kunyomi.reading kunyomi,\n" +
-                        "       onyomi.reading  onyomi,\n" +
-                        "       misc.grade,\n" +
-                        "       misc.stroke_count,\n" +
-                        "       misc.frequency,\n" +
-                        "       misc.jlpt,\n" +
-                        "       misc.radical_name\n" +
-                        "FROM character\n" +
-                        "         LEFT JOIN (SELECT character, ARRAY_AGG(meaning) meaning\n" +
-                        "                    FROM meaning\n" +
-                        "                    WHERE language = 'en'\n" +
-                        "                    GROUP BY meaning.character) meaning\n" +
-                        "                   ON character.id = meaning.character\n" +
-                        "         LEFT JOIN (SELECT character, ARRAY_AGG(reading) reading\n" +
-                        "                    FROM reading\n" +
-                        "                    WHERE type = 'ja_kun'\n" +
-                        "                    GROUP BY character) kunyomi\n" +
-                        "                   ON character.id = kunyomi.character\n" +
-                        "         LEFT JOIN (SELECT character, ARRAY_AGG(reading) reading\n" +
-                        "                    FROM reading\n" +
-                        "                    WHERE type = 'ja_on'\n" +
-                        "                    GROUP BY character) onyomi ON character.id = onyomi.character\n" +
-                        "         LEFT JOIN miscellaneous misc on character.id = misc.character\n" +
-                        "WHERE literal = :kanji\n" +
-                        "LIMIT 50")
+                .execute("""
+SELECT character.id,
+       character.literal,
+       meaning.meaning,
+       kunyomi.reading kunyomi,
+       onyomi.reading  onyomi,
+       misc.grade,
+       misc.stroke_count,
+       misc.frequency,
+       misc.jlpt,
+       misc.radical_name
+FROM character
+         LEFT JOIN (SELECT character, ARRAY_AGG(meaning) meaning
+                    FROM meaning
+                    WHERE language = 'en'
+                    GROUP BY meaning.character) meaning
+                   ON character.id = meaning.character
+         LEFT JOIN (SELECT character, ARRAY_AGG(reading) reading
+                    FROM reading
+                    WHERE type = 'ja_kun'
+                    GROUP BY character) kunyomi
+                   ON character.id = kunyomi.character
+         LEFT JOIN (SELECT character, ARRAY_AGG(reading) reading
+                    FROM reading
+                    WHERE type = 'ja_on'
+                    GROUP BY character) onyomi ON character.id = onyomi.character
+         LEFT JOIN miscellaneous misc on character.id = misc.character
+WHERE literal = :kanji
+LIMIT 50
+""")
                 .bind("kanji", kanji)
                 .map { row, _ ->
                     Kanji(
@@ -115,22 +160,24 @@ class Database {
     }
 
     fun getKanjisForEntry(entry: Int): Flux<Form> {
-        return client.execute("SELECT entr.id      entr,\n" +
-                "       kanj.txt     kanji,\n" +
-                "       kwkinf.descr kanji_info,\n" +
-                "       rdng.txt     reading,\n" +
-                "       kwrinf.descr reading_info\n" +
-                "FROM entr\n" +
-                "         LEFT JOIN kanj ON kanj.entr = entr.id\n" +
-                "         LEFT JOIN kinf ON kinf.entr = entr.id AND kinf.kanj = kanj.kanj\n" +
-                "         LEFT JOIN kwkinf ON kwkinf.id = kinf.kw\n" +
-                "         LEFT JOIN rdng ON rdng.entr = entr.id\n" +
-                "         LEFT JOIN rinf ON rinf.entr = entr.id AND rinf.rdng = rdng.rdng\n" +
-                "         LEFT JOIN kwrinf ON kwrinf.id = rinf.kw\n" +
-                "WHERE entr.id = :id\n" +
-                "GROUP BY entr.id, kanj.kanj, rdng.rdng, kanj.txt, kwkinf.descr, rdng.txt, kwrinf.descr\n" +
-                "ORDER BY kanj.kanj, rdng.rdng\n" +
-                "LIMIT 50")
+        return client.execute("""
+SELECT entr.id      entr,
+       kanj.txt     kanji,
+       kwkinf.descr kanji_info,
+       rdng.txt     reading,
+       kwrinf.descr reading_info
+FROM entr
+         LEFT JOIN kanj ON kanj.entr = entr.id
+         LEFT JOIN kinf ON kinf.entr = entr.id AND kinf.kanj = kanj.kanj
+         LEFT JOIN kwkinf ON kwkinf.id = kinf.kw
+         LEFT JOIN rdng ON rdng.entr = entr.id
+         LEFT JOIN rinf ON rinf.entr = entr.id AND rinf.rdng = rdng.rdng
+         LEFT JOIN kwrinf ON kwrinf.id = rinf.kw
+WHERE entr.id = :id
+GROUP BY entr.id, kanj.kanj, rdng.rdng, kanj.txt, kwkinf.descr, rdng.txt, kwrinf.descr
+ORDER BY kanj.kanj, rdng.rdng
+LIMIT 50
+        """)
                 .bind("id", entry)
                 .map { row ->
                     Form(
@@ -144,30 +191,32 @@ class Database {
     }
 
     fun getSensesForEntry(entry: Int): Flux<Sense> {
-        return client.execute("SELECT sense.notes,\n" +
-                "       pos.pos,\n" +
-                "       pos.pos_info,\n" +
-                "       fld.fld,\n" +
-                "       fld.fld_info,\n" +
-                "       gloss.txt  gloss,\n" +
-                "       misc.descr misc\n" +
-                "FROM sens sense\n" +
-                "         LEFT JOIN (SELECT pos.entr, pos.sens, ARRAY_AGG(kwpos.kw) pos, ARRAY_AGG(kwpos.descr) pos_info\n" +
-                "                    FROM pos\n" +
-                "                             JOIN kwpos ON pos.kw = kwpos.id\n" +
-                "                    GROUP BY pos.entr, pos.sens) pos ON pos.entr = sense.entr AND pos.sens = sense.sens\n" +
-                "         LEFT JOIN (SELECT fld.entr, fld.sens, ARRAY_AGG(kwfld.kw) fld, ARRAY_AGG(kwfld.descr) fld_info\n" +
-                "                    FROM fld\n" +
-                "                             JOIN kwfld ON fld.kw = kwfld.id\n" +
-                "                    GROUP BY fld.entr, fld.sens) fld ON fld.entr = sense.entr AND fld.sens = sense.sens\n" +
-                "         LEFT JOIN (SELECT gloss.entr, gloss.sens, ARRAY_AGG(gloss.txt) txt\n" +
-                "                    FROM gloss\n" +
-                "                    GROUP BY gloss.entr, gloss.sens) gloss ON gloss.entr = sense.entr AND gloss.sens = sense.sens\n" +
-                "         LEFT JOIN (SELECT misc.entr, misc.sens, kwmisc.descr\n" +
-                "                    FROM misc\n" +
-                "                             LEFT JOIN kwmisc ON misc.kw = kwmisc.id) misc\n" +
-                "                   ON misc.entr = sense.entr AND misc.sens = sense.sens\n" +
-                "WHERE sense.entr = :entry")
+        return client.execute("""
+SELECT sense.notes,
+       pos.pos,
+       pos.pos_info,
+       fld.fld,
+       fld.fld_info,
+       gloss.txt  gloss,
+       misc.descr misc
+FROM sens sense
+         LEFT JOIN (SELECT pos.entr, pos.sens, ARRAY_AGG(kwpos.kw) pos, ARRAY_AGG(kwpos.descr) pos_info
+                    FROM pos
+                             JOIN kwpos ON pos.kw = kwpos.id
+                    GROUP BY pos.entr, pos.sens) pos ON pos.entr = sense.entr AND pos.sens = sense.sens
+         LEFT JOIN (SELECT fld.entr, fld.sens, ARRAY_AGG(kwfld.kw) fld, ARRAY_AGG(kwfld.descr) fld_info
+                    FROM fld
+                             JOIN kwfld ON fld.kw = kwfld.id
+                    GROUP BY fld.entr, fld.sens) fld ON fld.entr = sense.entr AND fld.sens = sense.sens
+         LEFT JOIN (SELECT gloss.entr, gloss.sens, ARRAY_AGG(gloss.txt) txt
+                    FROM gloss
+                    GROUP BY gloss.entr, gloss.sens) gloss ON gloss.entr = sense.entr AND gloss.sens = sense.sens
+         LEFT JOIN (SELECT misc.entr, misc.sens, kwmisc.descr
+                    FROM misc
+                             LEFT JOIN kwmisc ON misc.kw = kwmisc.id) misc
+                   ON misc.entr = sense.entr AND misc.sens = sense.sens
+WHERE sense.entr = :entry
+                """)
                 .bind("entry", entry)
                 .map { row, _ ->
                     Sense(
