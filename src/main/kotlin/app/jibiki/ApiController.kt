@@ -14,6 +14,9 @@ class ApiController(
             @RequestParam("minLength", defaultValue = "0") minLength: Int,
             @RequestParam("maxLength", defaultValue = "0") maxLength: Int
     ): Flux<SentenceBundle> {
+        if (query.isEmpty())
+            return Flux.empty()
+
         return database.getSentences(query)
                 .filter { it.sentence.sentence.length >= minLength }
                 .filter { if (maxLength != 0) it.sentence.sentence.length <= maxLength else true }
@@ -21,12 +24,18 @@ class ApiController(
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
     fun wordSearch(@RequestParam("query") query: String): Flux<Word> {
+        if (query.isEmpty())
+            return Flux.empty()
+
         return database.getEntriesForWord(query)
-                .flatMap { database.getEntry(it) }
+                .flatMapSequential { database.getEntry(it) }
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/kanji"], produces = ["application/json"])
     fun kanjiSearch(@RequestParam("query") query: String): Flux<Kanji> {
+        if (query.isEmpty())
+            return Flux.empty()
+
         return database.getKanji(query)
     }
 }
