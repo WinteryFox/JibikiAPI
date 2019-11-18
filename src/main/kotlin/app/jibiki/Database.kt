@@ -131,18 +131,21 @@ LIMIT 50
 
         return client
                 .execute("""
-SELECT entr
-FROM kanj
-WHERE lower(txt) $equals lower(:q)
-UNION ALL
-SELECT entr
-FROM rdng
-WHERE txt $equals hiragana(:reading)
-   OR txt $equals katakana(:reading)
-UNION ALL
-SELECT entr
-FROM gloss
-WHERE lower(txt) $equals lower(:q)
+SELECT entries.entr
+FROM (SELECT entr
+      FROM kanj
+      WHERE lower(txt) $equals lower(:q)
+      UNION ALL
+      SELECT entr
+      FROM rdng
+      WHERE txt $equals hiragana(:reading)
+         OR txt $equals katakana(:reading)
+      UNION ALL
+      SELECT entr
+      FROM gloss
+      WHERE lower(txt) $equals lower(:q)) entries
+         LEFT JOIN freq ON freq.entr = entries.entr AND freq.rdng IS NOT NULL AND freq.kanj IS NULL
+ORDER BY freq.kw, freq.value;
                 """)
                 .bind("q", query)
                 .bind("reading", converter.convertRomajiToHiragana(query))
