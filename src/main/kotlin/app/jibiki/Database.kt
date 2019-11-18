@@ -145,7 +145,7 @@ FROM (SELECT entr
       FROM gloss
       WHERE lower(txt) $equals lower(:q)) entries
          LEFT JOIN freq ON freq.entr = entries.entr AND freq.rdng IS NOT NULL AND freq.kanj IS NULL
-ORDER BY freq.kw, freq.value;
+ORDER BY freq.kw, freq.value
                 """)
                 .bind("q", query)
                 .bind("reading", converter.convertRomajiToHiragana(query))
