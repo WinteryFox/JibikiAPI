@@ -1,0 +1,9 @@
+[Unit]
+Description=An English Japanese dictionary website
+
+[Service]
+ExecStart=/usr/bin/java -jar /home/jibiki/Jibiki.jar -Xmx8G
+User=jibiki
+Type=simple
+Restart=always
+RestartSec=10
