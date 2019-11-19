@@ -35,7 +35,7 @@ jobs:
       - run:
           name: Restart Jibiki
           command: |
-            ssh -t $SSH_USER@$SSH_HOST "sudo systemctl restart jibiki"
+            ssh $SSH_USER@$SSH_HOST "sudo systemctl restart jibiki"
 
 workflows:
   build-and-deploy:
