@@ -2,6 +2,7 @@ version: 2.1
 
 jobs:
   build:
+    working_directory: /tmp
     docker:
       - image: circleci/openjdk:8-jdk-stretch
     steps:
@@ -16,15 +17,21 @@ jobs:
           path: target/reports
       - store_artifacts:
           path: target/Jibiki.jar
+      - persist_to_workspace:
+          root: target
+          paths:
+            - Jibiki.jar
 
   deploy:
     machine:
       enabled: true
     steps:
+      - attach_workspace:
+          at: /tmp/target
       - run:
           name: Deploy Jibiki
           command: |
-            scp target/Jibiki.jar $SSH_USER@$SSH_HOST:~/Jibiki.jar
+            scp /tmp/target/Jibiki.jar $SSH_USER@$SSH_HOST:~/Jibiki.jar
             ssh $SSH_USER@$SSH_HOST "sudo systemctl restart jibiki"
 
 workflows:
