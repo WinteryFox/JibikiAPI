@@ -1,3 +1,4 @@
+[![Jibiki](https://img.shields.io/discord/635150469664210996.svg?color=7289da&label=Jibiki&logo=discord&style=flat-square)](https://discord.gg/635150469664210996)
 [![CircleCI](https://circleci.com/gh/WinteryFox/JibikiAPI.svg?style=svg)](https://circleci.com/gh/WinteryFox/JibikiAPI)
 
 # Jibiki
