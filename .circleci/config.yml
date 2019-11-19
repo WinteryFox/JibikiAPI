@@ -15,8 +15,7 @@ jobs:
       - store_test_results:
           path: target/reports
       - store_artifacts:
-          path: target/artifacts
-          destination: Jibiki.jar
+          path: target/Jibiki.jar
 
   deploy:
     machine:
@@ -25,8 +24,8 @@ jobs:
       - run:
           name: Deploy Jibiki
           command: |
-            scp target/artifacts/Jibiki.jar $SSH_USER@$SSH_HOST:~/Jibiki.jar
-            ssh $SSH_USER@$SSH_HOST "sudo systemctl restart Jibiki"
+            scp target/Jibiki.jar $SSH_USER@$SSH_HOST:~/Jibiki.jar
+            ssh $SSH_USER@$SSH_HOST "sudo systemctl restart jibiki"
 
 workflows:
   build-and-deploy:
