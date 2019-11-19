@@ -29,10 +29,13 @@ jobs:
       - attach_workspace:
           at: /tmp/jibiki/target
       - run:
-          name: Deploy Jibiki
+          name: Upload Jibiki
           command: |
             scp /tmp/jibiki/target/Jibiki.jar $SSH_USER@$SSH_HOST:~/Jibiki.jar
-            ssh $SSH_USER@$SSH_HOST "sudo systemctl restart jibiki"
+      - run:
+          name: Restart Jibiki
+          command: |
+            ssh -t $SSH_USER@$SSH_HOST "sudo systemctl restart jibiki"
 
 workflows:
   build-and-deploy:
