@@ -13,5 +13,5 @@ jobs:
             - ~/.m2
           key: {{checksum "pom.xml"}}
       - run: mvn package
-      - store_test_results
-        path: target/reports
+      - store_test_results:
+          path: target/reports
