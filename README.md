@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/WinteryFox/JibikiAPI.svg?style=svg)](https://circleci.com/gh/WinteryFox/JibikiAPI)
+
 # Jibiki
 
 [Jibiki](https://jibiki.app/) is a fast and reliable open-source dictionary website and app,
