@@ -7,6 +7,10 @@ jobs:
       - image: circleci/openjdk:8-jdk-stretch
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - build-{{ checksum "pom.xml" }}
+            - build-
       - run: mvn dependency:go-offline
       - save_cache:
           paths:
