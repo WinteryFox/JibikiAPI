@@ -15,3 +15,5 @@ jobs:
       - run: mvn package
       - store_test_results:
           path: target/reports
+      - store_artifacts:
+          path: target/artifacts
