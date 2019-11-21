@@ -1,5 +1,9 @@
-package app.jibiki
+package app.jibiki.controller
 
+import app.jibiki.model.Kanji
+import app.jibiki.model.SentenceBundle
+import app.jibiki.model.Word
+import app.jibiki.persistence.Database
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
 

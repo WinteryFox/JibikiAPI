@@ -1,4 +1,4 @@
-package app.jibiki
+package app.jibiki.model
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped
 

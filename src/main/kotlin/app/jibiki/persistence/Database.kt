@@ -1,5 +1,6 @@
-package app.jibiki
+package app.jibiki.persistence
 
+import app.jibiki.model.*
 import com.atilika.kuromoji.unidic.Tokenizer
 import com.moji4j.MojiConverter
 import org.springframework.beans.factory.annotation.Autowired

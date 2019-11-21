@@ -1,4 +1,4 @@
-package app.jibiki
+package app.jibiki.model
 
 data class Word(
         val id: Int,
