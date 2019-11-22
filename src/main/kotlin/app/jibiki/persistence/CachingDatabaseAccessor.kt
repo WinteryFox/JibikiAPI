@@ -93,8 +93,8 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
     override fun getEntry(id: Int): Mono<Word> {
         return redis.get("entry_$id")
                 .filter { it.isNotEmpty() }
-                .switchIfEmpty(insertAndReturnOriginal("entry_$id", Mono.just(mapper.writeValueAsString(database.getEntry(id)))))
                 .map { mapper.readValue(it, Word::class.java) }
+                .switchIfEmpty(insertAndReturnOriginal("entry_$id", database.getEntry(id)))
     }
 
     override fun getKanjisForEntry(entry: Int): Flux<Form> {
@@ -118,7 +118,7 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
     }
 
     data class TranslationKey(val ids: Array<Int>, val sourceLanguage: String)
-    data class WordEntry(val id: Int)
+    data class WordEntry(val id: Int = 0)
 
     companion object {
         private const val REDIS_DELIMITER = "#*#~#*#" // Why? because I can
