@@ -40,6 +40,15 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
                 .thenMany(cache)
     }
 
+    private fun <O> insertAndReturnOriginal(redisKey: String, original: Mono<O>): Mono<O> {
+        val cache = original.cache()
+        return cache
+                .map { mapper.writeValueAsString(it) }
+                .flatMap { redis.set(redisKey, it) }
+                .flatMap { redis.expire(redisKey, CACHING_TIME) }
+                .then(cache)
+    }
+
     override fun getSentences(query: String): Flux<SentenceBundle> {
         return getRedisObjectOrCache(
                 "sentences",
@@ -84,7 +93,7 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
     override fun getEntry(id: Int): Mono<Word> {
         return redis.get("entry_$id")
                 .filter { it.isNotEmpty() }
-                .switchIfEmpty(Mono.just(mapper.writeValueAsString(database.getEntry(id))))
+                .switchIfEmpty(insertAndReturnOriginal("entry_$id", Mono.just(mapper.writeValueAsString(database.getEntry(id)))))
                 .map { mapper.readValue(it, Word::class.java) }
     }
 
