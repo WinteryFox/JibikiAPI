@@ -104,7 +104,7 @@ FROM character
                     WHERE type = 'ja_on'
                     GROUP BY character) onyomi ON character.id = onyomi.character
          LEFT JOIN miscellaneous misc on character.id = misc.character
-WHERE literal = :kanji
+WHERE literal = :kanji OR :kanji = ANY(meaning.meaning) OR hiragana(:kanji) = ANY(kunyomi.reading) OR katakana(:kanji) = ANY(onyomi.reading)
 LIMIT 50
 """)
                 .bind("kanji", kanji)
@@ -112,7 +112,7 @@ LIMIT 50
                     Kanji(
                             row["id"] as Short,
                             row["literal"] as String,
-                            row["meaning"] as Array<String>,
+                            row["meaning"] as Array<String>? ?: emptyArray(),
                             row["kunyomi"] as Array<String>? ?: emptyArray(),
                             row["onyomi"] as Array<String>? ?: emptyArray(),
                             row["grade"] as Int?,
