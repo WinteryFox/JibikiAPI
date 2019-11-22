@@ -1,12 +1,16 @@
-package app.jibiki
+package app.jibiki.controller
 
+import app.jibiki.model.Kanji
+import app.jibiki.model.SentenceBundle
+import app.jibiki.model.Word
+import app.jibiki.persistence.CachingDatabaseAccessor
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
 
 @CrossOrigin
 @RestController
 class ApiController(
-        private val database: Database
+        private val database: CachingDatabaseAccessor
 ) {
     @RequestMapping(method = [RequestMethod.GET], value = ["/sentences"], produces = ["application/json"])
     fun sentenceSearch(

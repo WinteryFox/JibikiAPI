@@ -1,5 +1,6 @@
-package app.jibiki
+package app.jibiki.persistence
 
+import app.jibiki.model.*
 import com.atilika.kuromoji.unidic.Tokenizer
 import com.moji4j.MojiConverter
 import org.springframework.beans.factory.annotation.Autowired
@@ -10,13 +11,13 @@ import reactor.core.publisher.Mono
 import kotlin.streams.toList
 
 @Repository
-class Database {
+class SqlDatabaseAccessor : Database {
     @Autowired
     private lateinit var client: DatabaseClient
     private val tokenizer = Tokenizer()
     private val converter = MojiConverter()
 
-    fun getSentences(query: String): Flux<SentenceBundle> {
+    override fun getSentences(query: String): Flux<SentenceBundle> {
         return client
                 .execute("""
 SELECT s.id,
@@ -52,7 +53,7 @@ LIMIT 50
                 }
     }
 
-    fun getTranslations(ids: Array<Int>, sourceLanguage: String): Flux<Sentence> {
+    override fun getTranslations(ids: Array<Int>, sourceLanguage: String): Flux<Sentence> {
         if (ids.isEmpty())
             return Flux.empty()
 
@@ -74,7 +75,7 @@ WHERE s.id = ANY (:ids) AND (s.lang = 'jpn' OR s.lang='eng') AND (s.lang != :sou
                 .all()
     }
 
-    fun getKanji(kanji: String): Flux<Kanji> {
+    override fun getKanji(kanji: String): Flux<Kanji> {
         return client
                 .execute("""
 SELECT character.id,
@@ -124,7 +125,7 @@ LIMIT 50
                 .all()
     }
 
-    fun getEntriesForWord(word: String): Flux<Int> {
+    override fun getEntriesForWord(word: String): Flux<Int> {
         val exact = !word.contains('*').or(word.contains('＊'))
         val equals = if (exact) "=" else "LIKE"
         val query = word.replace('*', '%').replace('＊', '%')
@@ -155,7 +156,7 @@ ORDER BY entries.txt
                 }
     }
 
-    fun getEntry(id: Int): Mono<Word> {
+    override fun getEntry(id: Int): Mono<Word> {
         return getKanjisForEntry(id)
                 .collectList()
                 .flatMap { kanjis ->
@@ -171,7 +172,7 @@ ORDER BY entries.txt
                 }
     }
 
-    fun getKanjisForEntry(entry: Int): Flux<Form> {
+    override fun getKanjisForEntry(entry: Int): Flux<Form> {
         return client.execute("""
 SELECT entr.id      entr,
        kanj.txt     kanji,
@@ -202,7 +203,7 @@ LIMIT 50
                 .all()
     }
 
-    fun getSensesForEntry(entry: Int): Flux<Sense> {
+    override fun getSensesForEntry(entry: Int): Flux<Sense> {
         return client.execute("""
 SELECT sense.notes,
        pos.pos,
