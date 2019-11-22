@@ -1,14 +1,14 @@
 package app.jibiki.model
 
 data class Kanji(
-        val id: Short,
-        val literal: String,
-        val meaning: Array<String>,
-        val kunyomi: Array<String>?,
-        val onyomi: Array<String>?,
-        val grade: Int?,
-        val strokeCount: Int,
-        val frequency: Int?,
-        val jlpt: Int?,
-        val radicalName: String?
+        val id: Short = 0,
+        val literal: String = "",
+        val meaning: Array<String> = emptyArray(),
+        val kunyomi: Array<String>? = null,
+        val onyomi: Array<String>? = null,
+        val grade: Int? = null,
+        val strokeCount: Int = 0,
+        val frequency: Int? = null,
+        val jlpt: Int? = null,
+        val radicalName: String? = null
 )

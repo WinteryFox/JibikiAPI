@@ -1,8 +1,8 @@
 package app.jibiki.model
 
 data class Form(
-        val kanji: String?,
-        val kanjiInfo: String?,
-        val reading: String?,
-        val readingInfo: String?
+        val kanji: String? = null,
+        val kanjiInfo: String? = null,
+        val reading: String? = null,
+        val readingInfo: String? = null
 )

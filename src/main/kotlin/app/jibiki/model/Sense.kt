@@ -1,9 +1,9 @@
 package app.jibiki.model
 
 data class Sense(
-        val gloss: Array<String>,
-        val pos: Array<PartOfSpeech>,
-        val fld: Array<FieldOfUse>,
-        val notes: String?,
-        val misc: String?
+        val gloss: Array<String> = emptyArray(),
+        val pos: Array<PartOfSpeech> = emptyArray(),
+        val fld: Array<FieldOfUse> = emptyArray(),
+        val notes: String? = null,
+        val misc: String? = null
 )
