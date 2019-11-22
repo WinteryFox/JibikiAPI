@@ -54,9 +54,13 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
                 "sentences",
                 query.toLowerCase(),
                 query,
-                SentenceBundle::class.java,
-                Function { database.getSentences(it) }
+                RedisSentenceBundle::class.java,
+                Function {
+                    database.getSentences(it)
+                            .map { bundle -> RedisSentenceBundle(bundle.sentence, bundle.translations) }
+                }
         )
+                .map { SentenceBundle(it.sentence, it.translations) }
     }
 
     override fun getTranslations(ids: Array<Int>, sourceLanguage: String): Flux<Sentence> {

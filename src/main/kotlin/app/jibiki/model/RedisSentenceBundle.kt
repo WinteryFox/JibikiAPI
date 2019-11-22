@@ -1,9 +1,6 @@
 package app.jibiki.model
 
-import com.fasterxml.jackson.annotation.JsonUnwrapped
-
-data class SentenceBundle(
-        @JsonUnwrapped
+data class RedisSentenceBundle(
         val sentence: Sentence = Sentence(),
         val translations: List<Sentence> = mutableListOf()
 )
