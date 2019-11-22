@@ -122,6 +122,6 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
 
     companion object {
         private const val REDIS_DELIMITER = "#*#~#*#" // Why? because I can
-        private val CACHING_TIME = TimeUnit.MINUTES.toSeconds(10)
+        private val CACHING_TIME = TimeUnit.DAYS.toSeconds(7)
     }
 }
