@@ -14,7 +14,6 @@ import kotlin.streams.toList
 class SqlDatabaseAccessor : Database {
     @Autowired
     private lateinit var client: DatabaseClient
-    private val tokenizer = Tokenizer()
     private val converter = MojiConverter()
 
     override fun getSentences(query: String): Flux<SentenceBundle> {
@@ -104,7 +103,7 @@ FROM character
                     WHERE type = 'ja_on'
                     GROUP BY character) onyomi ON character.id = onyomi.character
          LEFT JOIN miscellaneous misc on character.id = misc.character
-WHERE literal = :kanji OR :kanji = ANY(meaning.meaning) OR hiragana(:kanji) = ANY(kunyomi.reading) OR katakana(:kanji) = ANY(onyomi.reading)
+WHERE literal = :kanji OR lower(:kanji) = ANY(meaning.meaning) OR hiragana(:kanji) = ANY(kunyomi.reading) OR katakana(:kanji) = ANY(onyomi.reading)
 LIMIT 50
 """)
                 .bind("kanji", kanji)
@@ -145,7 +144,10 @@ FROM (SELECT entr, txt
       SELECT entr, txt
       FROM gloss
       WHERE lower(txt) $equals lower(:q)) entries
+         JOIN entr ON entr.id = entries.entr
+WHERE entr.src != 3
 ORDER BY entries.txt
+LIMIT 200
                 """)
                 .bind("q", query)
                 .bind("reading", converter.convertRomajiToHiragana(query))
@@ -186,7 +188,7 @@ FROM entr
          LEFT JOIN rdng ON rdng.entr = entr.id
          LEFT JOIN rinf ON rinf.entr = entr.id AND rinf.rdng = rdng.rdng
          LEFT JOIN kwrinf ON kwrinf.id = rinf.kw
-WHERE entr.id = :id
+WHERE entr.id = :id AND entr.src != 3
 GROUP BY entr.id, kanj.kanj, rdng.rdng, kanj.txt, kwkinf.descr, rdng.txt, kwrinf.descr
 ORDER BY kanj.kanj, rdng.rdng
 LIMIT 50
