@@ -1,7 +1,6 @@
 package app.jibiki.persistence
 
 import app.jibiki.model.*
-import com.atilika.kuromoji.unidic.Tokenizer
 import com.moji4j.MojiConverter
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.r2dbc.core.DatabaseClient
@@ -16,7 +15,7 @@ class SqlDatabaseAccessor : Database {
     private lateinit var client: DatabaseClient
     private val converter = MojiConverter()
 
-    override fun getSentences(query: String): Flux<SentenceBundle> {
+    override fun getSentences(query: String, page: Int): Flux<SentenceBundle> {
         return client
                 .execute("""
 SELECT s.id,
@@ -30,8 +29,10 @@ FROM sentences s
 WHERE s.tsv @@ q AND (s.lang = 'jpn' OR s.lang='eng')
 GROUP BY s.id, q, score
 ORDER BY score DESC
-LIMIT 50
+LIMIT :pageSize OFFSET :page
                 """)
+                .bind("pageSize", pageSize)
+                .bind("page", page * pageSize)
                 .bind("q", query)
                 .fetch()
                 .all()
@@ -104,8 +105,9 @@ FROM character
                     GROUP BY character) onyomi ON character.id = onyomi.character
          LEFT JOIN miscellaneous misc on character.id = misc.character
 WHERE literal = :kanji OR lower(:kanji) = ANY(meaning.meaning) OR hiragana(:kanji) = ANY(kunyomi.reading) OR katakana(:kanji) = ANY(onyomi.reading)
-LIMIT 50
+LIMIT :pageSize
 """)
+                .bind("pageSize", pageSize)
                 .bind("kanji", kanji)
                 .map { row, _ ->
                     Kanji(
@@ -124,7 +126,7 @@ LIMIT 50
                 .all()
     }
 
-    override fun getEntriesForWord(word: String): Flux<Int> {
+    override fun getEntriesForWord(word: String, page: Int): Flux<Int> {
         val exact = !word.contains('*').or(word.contains('＊'))
         val equals = if (exact) "=" else "LIKE"
         val query = word.replace('*', '%').replace('＊', '%')
@@ -147,8 +149,10 @@ FROM (SELECT entr, txt
          JOIN entr ON entr.id = entries.entr
 WHERE entr.src != 3
 ORDER BY entries.txt
-LIMIT 200
+LIMIT :pageSize OFFSET :page
                 """)
+                .bind("pageSize", pageSize)
+                .bind("page", page * pageSize)
                 .bind("q", query)
                 .bind("reading", converter.convertRomajiToHiragana(query))
                 .fetch()

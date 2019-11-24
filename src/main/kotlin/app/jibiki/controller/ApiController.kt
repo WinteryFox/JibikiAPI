@@ -15,28 +15,34 @@ class ApiController(
     @RequestMapping(method = [RequestMethod.GET], value = ["/sentences"], produces = ["application/json"])
     fun sentenceSearch(
             @RequestParam("query") query: String,
+            @RequestParam("page", defaultValue = "0") page: Int,
             @RequestParam("minLength", defaultValue = "0") minLength: Int,
             @RequestParam("maxLength", defaultValue = "0") maxLength: Int
     ): Flux<SentenceBundle> {
         if (query.isEmpty())
             return Flux.empty()
 
-        return database.getSentences(query)
+        return database.getSentences(query, page)
                 .filter { it.sentence.sentence.length >= minLength }
                 .filter { if (maxLength != 0) it.sentence.sentence.length <= maxLength else true }
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
-    fun wordSearch(@RequestParam("query") query: String): Flux<Word> {
+    fun wordSearch(
+            @RequestParam("query") query: String,
+            @RequestParam("page", defaultValue = "0") page: Int
+    ): Flux<Word> {
         if (query.isEmpty())
             return Flux.empty()
 
-        return database.getEntriesForWord(query)
+        return database.getEntriesForWord(query, page)
                 .flatMapSequential { database.getEntry(it) }
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/kanji"], produces = ["application/json"])
-    fun kanjiSearch(@RequestParam("query") query: String): Flux<Kanji> {
+    fun kanjiSearch(
+            @RequestParam("query") query: String
+    ): Flux<Kanji> {
         if (query.isEmpty())
             return Flux.empty()
 

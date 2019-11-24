@@ -18,25 +18,27 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
     private fun <O, K> getRedisObjectOrCache(
             functionKey: String,
             redisKey: String,
+            page: Int,
             originalKey: K,
             `class`: Class<O>,
-            dbSupplier: Function<K, Flux<O>>): Flux<O> {
-        return redis.get(functionKey + "_" + redisKey)
+            dbSupplier: Function<K, Flux<O>>
+    ): Flux<O> {
+        return redis.get(functionKey + "_" + redisKey + "_" + page)
                 .switchIfEmpty(Mono.just(""))
                 .flatMapMany { Flux.fromStream(it.split(REDIS_DELIMITER).stream()) }
                 .filter { it.isNotEmpty() }
                 .map { mapper.readValue(it, `class`) }
-                .switchIfEmpty(insertAndReturnOriginal(functionKey, redisKey, dbSupplier.apply(originalKey)))
+                .switchIfEmpty(insertAndReturnOriginal(functionKey, redisKey, page, dbSupplier.apply(originalKey)))
     }
 
-    private fun <O> insertAndReturnOriginal(functionKey: String, redisKey: String, original: Flux<O>): Flux<O> {
+    private fun <O> insertAndReturnOriginal(functionKey: String, redisKey: String, page: Int, original: Flux<O>): Flux<O> {
         val cache = original.cache()
         return cache
                 .map { mapper.writeValueAsString(it) }
                 .collectList()
                 .map { it.joinToString(REDIS_DELIMITER) }
-                .flatMap { redis.set(functionKey + "_" + redisKey, it) }
-                .flatMap { redis.expire(functionKey + "_" + redisKey, CACHING_TIME) }
+                .flatMap { redis.set(functionKey + "_" + redisKey + "_" + page, it) }
+                .flatMap { redis.expire(functionKey + "_" + redisKey + "_" + page, CACHING_TIME) }
                 .thenMany(cache)
     }
 
@@ -49,14 +51,15 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
                 .then(cache)
     }
 
-    override fun getSentences(query: String): Flux<SentenceBundle> {
+    override fun getSentences(query: String, page: Int): Flux<SentenceBundle> {
         return getRedisObjectOrCache(
                 "sentences",
                 query.toLowerCase(),
+                page,
                 query,
                 RedisSentenceBundle::class.java,
                 Function {
-                    database.getSentences(it)
+                    database.getSentences(it, page)
                             .map { bundle -> RedisSentenceBundle(bundle.sentence, bundle.translations) }
                 }
         )
@@ -68,6 +71,7 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
         return getRedisObjectOrCache(
                 "translations",
                 redisKey.toLowerCase(),
+                0,
                 TranslationKey(ids, sourceLanguage),
                 Sentence::class.java,
                 Function { database.getTranslations(it.ids, it.sourceLanguage) }
@@ -78,19 +82,21 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
         return getRedisObjectOrCache(
                 "kanji",
                 kanji.toLowerCase(),
+                0,
                 kanji,
                 Kanji::class.java,
                 Function { database.getKanji(it) }
         )
     }
 
-    override fun getEntriesForWord(word: String): Flux<Int> {
+    override fun getEntriesForWord(word: String, page: Int): Flux<Int> {
         return getRedisObjectOrCache(
                 "wordentries",
                 word.toLowerCase(),
+                page,
                 word,
                 WordEntry::class.java,
-                Function { database.getEntriesForWord(word).map { WordEntry(it) } }
+                Function { database.getEntriesForWord(word, page).map { WordEntry(it) } }
         ).map { it.id }
     }
 
@@ -105,6 +111,7 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
         return getRedisObjectOrCache(
                 "kanjientry",
                 entry.toString(),
+                0,
                 entry,
                 Form::class.java,
                 Function { database.getKanjisForEntry(it) }
@@ -115,6 +122,7 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
         return getRedisObjectOrCache(
                 "senses",
                 entry.toString(),
+                0,
                 entry,
                 Sense::class.java,
                 Function { database.getSensesForEntry(it) }
