@@ -4,6 +4,9 @@ import app.jibiki.model.Kanji
 import app.jibiki.model.SentenceBundle
 import app.jibiki.model.Word
 import app.jibiki.persistence.CachingDatabaseAccessor
+import app.jibiki.spec.CreateUserSpec
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
 
@@ -47,5 +50,13 @@ class ApiController(
             return Flux.empty()
 
         return database.getKanji(query)
+    }
+
+    @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/json"])
+    fun createUser(
+            @RequestBody spec: CreateUserSpec
+    ): ResponseEntity<HttpStatus> {
+        println("username: ${spec.username} email: ${spec.email}")
+        return ResponseEntity.ok().build()
     }
 }

@@ -15,6 +15,18 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
     private val redis = RedisClient.create("redis://localhost:6379").connect().reactive() // todo: config smh
     private val mapper = ObjectMapper()
 
+    private fun <O, K> getRedisObject(
+            functionKey: String,
+            redisKey: String,
+            page: Int,
+            `class`: Class<O>
+    ): Flux<O> {
+        return redis.get(functionKey + "_" + redisKey + "_" + page)
+                .flatMapMany { Flux.fromStream(it.split(REDIS_DELIMITER).stream()) }
+                .filter { it.isNotEmpty() }
+                .map { mapper.readValue(it, `class`) }
+    }
+
     private fun <O, K> getRedisObjectOrCache(
             functionKey: String,
             redisKey: String,
@@ -23,12 +35,12 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
             `class`: Class<O>,
             dbSupplier: Function<K, Flux<O>>
     ): Flux<O> {
-        return redis.get(functionKey + "_" + redisKey + "_" + page)
-                .switchIfEmpty(Mono.just(""))
-                .flatMapMany { Flux.fromStream(it.split(REDIS_DELIMITER).stream()) }
-                .filter { it.isNotEmpty() }
-                .map { mapper.readValue(it, `class`) }
-                .switchIfEmpty(insertAndReturnOriginal(functionKey, redisKey, page, dbSupplier.apply(originalKey)))
+        return getRedisObject<O, K>(
+                functionKey,
+                redisKey,
+                page,
+                `class`
+        ).switchIfEmpty(insertAndReturnOriginal(functionKey, redisKey, page, dbSupplier.apply(originalKey)))
     }
 
     private fun <O> insertAndReturnOriginal(functionKey: String, redisKey: String, page: Int, original: Flux<O>): Flux<O> {
