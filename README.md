@@ -8,6 +8,9 @@ this repository contains the API which is responsible for all functionality.
 The front-end repository can be found at
 [JibikiFrontend](https://github.com/WinteryFox/JibikiFrontend/).
 
+A Java and Kotlin library to interact with the API can be found at
+[Jibiki Java Client](https://github.com/ByteAlex/jibiki-java-client)
+
 ## Goals
 
 * Build a comprehensive completely free API tailored to the needs of language learners
