@@ -5,10 +5,12 @@ import app.jibiki.model.SentenceBundle
 import app.jibiki.model.Word
 import app.jibiki.persistence.CachingDatabaseAccessor
 import app.jibiki.spec.CreateUserSpec
+import app.jibiki.spec.LoginSpec
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 
 @CrossOrigin
 @RestController
@@ -52,11 +54,17 @@ class ApiController(
         return database.getKanji(query)
     }
 
-    @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/json"])
+    @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
     fun createUser(
-            @RequestBody spec: CreateUserSpec
-    ): ResponseEntity<HttpStatus> {
-        println("username: ${spec.username} email: ${spec.email}")
-        return ResponseEntity.ok().build()
+            createUserSpec: CreateUserSpec
+    ): Mono<ResponseEntity<HttpStatus>> {
+        return database.createUser(createUserSpec).map { ResponseEntity<HttpStatus>(it) }
+    }
+
+    @RequestMapping(method = [RequestMethod.POST], value = ["/users/login"], consumes = ["application/x-www-form-urlencoded"])
+    fun loginUser(
+            loginSpec: LoginSpec
+    ): Mono<String> {
+        return Mono.just("sometoken")
     }
 }

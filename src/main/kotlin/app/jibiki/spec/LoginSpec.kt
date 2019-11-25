@@ -1,7 +1,6 @@
 package app.jibiki.spec
 
-data class CreateUserSpec(
-        val username: String,
+data class LoginSpec(
         val email: String,
         val password: String
 )

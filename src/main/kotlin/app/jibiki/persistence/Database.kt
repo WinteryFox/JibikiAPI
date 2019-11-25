@@ -1,6 +1,8 @@
 package app.jibiki.persistence
 
 import app.jibiki.model.*
+import app.jibiki.spec.CreateUserSpec
+import org.springframework.http.HttpStatus
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
@@ -15,4 +17,6 @@ interface Database {
     fun getEntry(id: Int): Mono<Word>
     fun getKanjisForEntry(entry: Int): Flux<Form>
     fun getSensesForEntry(entry: Int): Flux<Sense>
+
+    fun createUser(createUserSpec: CreateUserSpec): Mono<HttpStatus>
 }

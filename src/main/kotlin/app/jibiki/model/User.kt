@@ -1,7 +1,7 @@
 package app.jibiki.model
 
 data class User(
-        val id: String,
+        val id: Snowflake,
         val username: String,
         val email: String
 )

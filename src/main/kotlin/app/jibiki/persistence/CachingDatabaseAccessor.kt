@@ -1,8 +1,10 @@
 package app.jibiki.persistence
 
 import app.jibiki.model.*
+import app.jibiki.spec.CreateUserSpec
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.lettuce.core.RedisClient
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -10,8 +12,9 @@ import java.util.concurrent.TimeUnit
 import java.util.function.Function
 
 @Service
-class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Database {
-
+class CachingDatabaseAccessor(
+        private val database: SqlDatabaseAccessor
+) : Database {
     private val redis = RedisClient.create("redis://localhost:6379").connect().reactive() // todo: config smh
     private val mapper = ObjectMapper()
 
@@ -139,6 +142,17 @@ class CachingDatabaseAccessor(private val database: SqlDatabaseAccessor) : Datab
                 Sense::class.java,
                 Function { database.getSensesForEntry(it) }
         )
+    }
+
+    override fun createUser(createUserSpec: CreateUserSpec): Mono<HttpStatus> {
+        return database.userExists(createUserSpec.email)
+                .flatMap {
+                    if (it)
+                        Mono.just(HttpStatus.CONFLICT)
+                    else
+                        database
+                                .createUser(createUserSpec)
+                }
     }
 
     data class TranslationKey(val ids: Array<Int>, val sourceLanguage: String)

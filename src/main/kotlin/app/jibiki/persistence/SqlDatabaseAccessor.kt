@@ -1,9 +1,12 @@
 package app.jibiki.persistence
 
 import app.jibiki.model.*
+import app.jibiki.spec.CreateUserSpec
 import com.moji4j.MojiConverter
+import org.mindrot.jbcrypt.BCrypt
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.r2dbc.core.DatabaseClient
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Repository
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -263,5 +266,32 @@ WHERE sense.entr = :entry
                     )
                 }
                 .all()
+    }
+
+    fun userExists(email: String): Mono<Boolean> {
+        return client.execute("""
+                    SELECT count(*) FROM users WHERE email = :email
+                """)
+                .bind("email", email)
+                .map { row ->
+                    row["count"] as Long > 0
+                }
+                .first()
+    }
+
+    override fun createUser(createUserSpec: CreateUserSpec): Mono<HttpStatus> {
+        val snowflake = Snowflake.next()
+        val salt = BCrypt.gensalt()
+        val hash = BCrypt.hashpw(createUserSpec.password, salt)
+
+        return client.execute("INSERT INTO users (snowflake, email, hash, salt, username) VALUES (:snowflake, :email, :hash, :salt, :username)")
+                .bind("snowflake", snowflake.id)
+                .bind("email", createUserSpec.email)
+                .bind("hash", hash)
+                .bind("salt", salt)
+                .bind("username", createUserSpec.username)
+                .fetch()
+                .first()
+                .thenReturn(HttpStatus.CREATED)
     }
 }
