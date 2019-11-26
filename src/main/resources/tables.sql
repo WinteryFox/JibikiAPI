@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS users
 
 CREATE TABLE IF NOT EXISTS userTokens
 (
-    snowflake TEXT                        NOT NULL PRIMARY KEY,
+    snowflake TEXT                        NOT NULL REFERENCES users (snowflake),
     token     TEXT                        NOT NULL,
-    expiry    TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (now() AT TIME ZONE 'UTC') + '7'
-)
+    expiry    TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (now() AT TIME ZONE 'UTC') + '7',
+    PRIMARY KEY (snowflake, token)
+);

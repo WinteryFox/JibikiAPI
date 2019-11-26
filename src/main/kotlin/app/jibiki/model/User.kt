@@ -1,10 +1,10 @@
 package app.jibiki.model
 
-import java.time.Instant
+import java.time.LocalDateTime
 
 data class User(
-        val id: Snowflake,
-        val creation: Instant,
+        val snowflake: Snowflake,
+        val creation: LocalDateTime,
         val username: String,
         val email: String
 )

@@ -19,5 +19,7 @@ interface Database {
     fun getSensesForEntry(entry: Int): Flux<Sense>
 
     fun createUser(createUserSpec: CreateUserSpec): Mono<HttpStatus>
-    fun checkCredentials(email: String, password: String): Mono<Boolean>
+    fun checkCredentials(email: String, password: String): Mono<User>
+    fun getToken(user: User): Mono<Token>
+    fun createToken(user: User): Mono<Token>
 }

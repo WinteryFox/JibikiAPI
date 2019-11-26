@@ -2,16 +2,17 @@ package app.jibiki.controller
 
 import app.jibiki.model.Kanji
 import app.jibiki.model.SentenceBundle
+import app.jibiki.model.Token
 import app.jibiki.model.Word
 import app.jibiki.persistence.CachingDatabaseAccessor
 import app.jibiki.spec.CreateUserSpec
 import app.jibiki.spec.LoginSpec
+import org.springframework.beans.BeanInstantiationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
-import java.util.*
 
 @CrossOrigin
 @RestController
@@ -59,20 +60,24 @@ class ApiController(
     fun createUser(
             createUserSpec: CreateUserSpec
     ): Mono<ResponseEntity<HttpStatus>> {
-        return database.createUser(createUserSpec).map { ResponseEntity<HttpStatus>(it) }
+        return database
+                .createUser(createUserSpec)
+                .map { ResponseEntity<HttpStatus>(it) }
     }
 
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/login"], consumes = ["application/x-www-form-urlencoded"])
     fun loginUser(
             loginSpec: LoginSpec
-    ): Mono<ResponseEntity<String>> {
+    ): Mono<ResponseEntity<Token>> {
         return database
                 .checkCredentials(loginSpec.email, loginSpec.password)
-                .map {
-                    if (it)
-                        ResponseEntity.ok().body(String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray())))
-                    else
-                        ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-                }
+                .flatMap { database.getToken(it).switchIfEmpty(database.createToken(it)) }
+                .map { ResponseEntity.ok().body(it) }
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
+    }
+
+    @ExceptionHandler(BeanInstantiationException::class)
+    fun handleBeans(): ResponseEntity<String> {
+        return ResponseEntity.badRequest().build()
     }
 }

@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Repository
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import java.time.LocalDateTime
+import java.util.*
 import kotlin.streams.toList
 
 @Repository
@@ -294,14 +296,44 @@ WHERE sense.entr = :entry
                 .thenReturn(HttpStatus.CREATED)
     }
 
-    override fun checkCredentials(email: String, password: String): Mono<Boolean> {
-        return client.execute("SELECT hash FROM users WHERE email = :email")
+    override fun checkCredentials(email: String, password: String): Mono<User> {
+        return client.execute("SELECT * FROM users WHERE email = :email")
                 .bind("email", email)
                 .fetch()
                 .first()
+                .filter { BCrypt.checkpw(password, it["hash"] as String) }
                 .map {
-                    BCrypt.checkpw(password, it["hash"] as String)
+                    User(
+                            Snowflake((it["snowflake"] as String).toLong()),
+                            it["creation"] as LocalDateTime,
+                            it["username"] as String,
+                            it["email"] as String
+                    )
                 }
-                .switchIfEmpty(Mono.just(false))
+    }
+
+    override fun getToken(user: User): Mono<Token> {
+        return client.execute("SELECT token, expiry FROM userTokens WHERE snowflake = :snowflake AND expiry > now() AT TIME ZONE 'UTC'")
+                .bind("snowflake", user.snowflake.id.toString())
+                .map { row ->
+                    Token(
+                            row["token"] as String,
+                            row["expiry"] as LocalDateTime
+                    )
+                }
+                .first()
+    }
+
+    override fun createToken(user: User): Mono<Token> {
+        val token = String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray()))
+        val expiry = LocalDateTime.now().plusDays(7)
+
+        return client.execute("INSERT INTO userTokens (snowflake, token, expiry) VALUES (:snowflake, :token, :expiry)")
+                .bind("snowflake", user.snowflake.id.toString())
+                .bind("token", token)
+                .bind("expiry", expiry)
+                .fetch()
+                .first()
+                .thenReturn(Token(token, expiry))
     }
 }
