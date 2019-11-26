@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.core.publisher.toFlux
 import java.util.concurrent.TimeUnit
 import java.util.function.Function
 
@@ -153,6 +154,10 @@ class CachingDatabaseAccessor(
                         database
                                 .createUser(createUserSpec)
                 }
+    }
+
+    override fun checkCredentials(email: String, password: String): Mono<Boolean> {
+        return database.checkCredentials(email, password)
     }
 
     data class TranslationKey(val ids: Array<Int>, val sourceLanguage: String)

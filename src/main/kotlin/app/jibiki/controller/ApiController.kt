@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import java.util.*
 
 @CrossOrigin
 @RestController
@@ -64,7 +65,14 @@ class ApiController(
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/login"], consumes = ["application/x-www-form-urlencoded"])
     fun loginUser(
             loginSpec: LoginSpec
-    ): Mono<String> {
-        return Mono.just("sometoken")
+    ): Mono<ResponseEntity<String>> {
+        return database
+                .checkCredentials(loginSpec.email, loginSpec.password)
+                .map {
+                    if (it)
+                        ResponseEntity.ok().body(String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray())))
+                    else
+                        ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+                }
     }
 }

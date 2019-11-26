@@ -284,14 +284,24 @@ WHERE sense.entr = :entry
         val salt = BCrypt.gensalt()
         val hash = BCrypt.hashpw(createUserSpec.password, salt)
 
-        return client.execute("INSERT INTO users (snowflake, email, hash, salt, username) VALUES (:snowflake, :email, :hash, :salt, :username)")
+        return client.execute("INSERT INTO users (snowflake, email, hash, username) VALUES (:snowflake, :email, :hash, :username)")
                 .bind("snowflake", snowflake.id)
                 .bind("email", createUserSpec.email)
                 .bind("hash", hash)
-                .bind("salt", salt)
                 .bind("username", createUserSpec.username)
                 .fetch()
                 .first()
                 .thenReturn(HttpStatus.CREATED)
+    }
+
+    override fun checkCredentials(email: String, password: String): Mono<Boolean> {
+        return client.execute("SELECT hash FROM users WHERE email = :email")
+                .bind("email", email)
+                .fetch()
+                .first()
+                .map {
+                    BCrypt.checkpw(password, it["hash"] as String)
+                }
+                .switchIfEmpty(Mono.just(false))
     }
 }
