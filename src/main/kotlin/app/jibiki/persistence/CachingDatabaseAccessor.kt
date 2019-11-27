@@ -3,6 +3,8 @@ package app.jibiki.persistence
 import app.jibiki.model.*
 import app.jibiki.spec.CreateUserSpec
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.kotlin.KotlinModule
 import io.lettuce.core.RedisClient
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -17,7 +19,7 @@ class CachingDatabaseAccessor(
         private val database: SqlDatabaseAccessor
 ) : Database {
     private val redis = RedisClient.create("redis://localhost:6379").connect().reactive() // todo: config smh
-    private val mapper = ObjectMapper()
+    private val mapper = ObjectMapper().registerModule(KotlinModule()).registerModule(JavaTimeModule())
 
     private fun <O> getRedisObject(
             functionKey: String,
@@ -174,10 +176,10 @@ class CachingDatabaseAccessor(
     fun getToken(user: User): Mono<Token> {
         val token = Token(user.snowflake!!.id, String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray())), 600000)
 
-        return getRedisObject("tokens", user.snowflake!!.id.toString(), 0, Token::class.java)
+        return getRedisObject("tokens", user.snowflake.id.toString(), 0, Token::class.java)
                 .next()
                 .switchIfEmpty(
-                        insertAndReturnOriginal("tokens", user.snowflake!!.id.toString(), 0, Flux.just(token))
+                        insertAndReturnOriginal("tokens", user.snowflake.id.toString(), 0, Flux.just(token))
                                 .next()
                                 .flatMap {
                                     insertAndReturnOriginal("tokens", token.token!!, 0, Flux.just(token))
