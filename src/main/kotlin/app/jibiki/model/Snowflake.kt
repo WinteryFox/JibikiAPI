@@ -1,8 +1,12 @@
 package app.jibiki.model
 
 class Snowflake(
-        val id: Long
+        val id: Long? = null
 ) {
+    override fun toString(): String {
+        return id.toString()
+    }
+
     companion object {
         private const val dataCenterIdBits = 5
         private const val workerIdBits = 5

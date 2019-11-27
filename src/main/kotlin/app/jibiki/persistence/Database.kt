@@ -20,6 +20,5 @@ interface Database {
 
     fun createUser(createUserSpec: CreateUserSpec): Mono<HttpStatus>
     fun checkCredentials(email: String, password: String): Mono<User>
-    fun getToken(user: User): Mono<Token>
-    fun createToken(user: User): Mono<Token>
+    fun getUser(snowflake: Snowflake): Mono<User>
 }

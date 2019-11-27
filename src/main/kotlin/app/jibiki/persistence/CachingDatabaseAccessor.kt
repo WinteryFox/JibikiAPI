@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.function.Function
 
@@ -18,7 +19,7 @@ class CachingDatabaseAccessor(
     private val redis = RedisClient.create("redis://localhost:6379").connect().reactive() // todo: config smh
     private val mapper = ObjectMapper()
 
-    private fun <O, K> getRedisObject(
+    private fun <O> getRedisObject(
             functionKey: String,
             redisKey: String,
             page: Int,
@@ -38,7 +39,7 @@ class CachingDatabaseAccessor(
             `class`: Class<O>,
             dbSupplier: Function<K, Flux<O>>
     ): Flux<O> {
-        return getRedisObject<O, K>(
+        return getRedisObject(
                 functionKey,
                 redisKey,
                 page,
@@ -159,12 +160,35 @@ class CachingDatabaseAccessor(
         return database.checkCredentials(email, password)
     }
 
-    override fun getToken(user: User): Mono<Token> {
-        return database.getToken(user)
+    override fun getUser(snowflake: Snowflake): Mono<User> {
+        return getRedisObjectOrCache(
+                "users",
+                snowflake.id.toString(),
+                0,
+                snowflake.id.toString(),
+                User::class.java,
+                Function { Flux.from(database.getUser(snowflake)) }
+        ).next()
     }
 
-    override fun createToken(user: User): Mono<Token> {
-        return database.createToken(user)
+    fun getToken(user: User): Mono<Token> {
+        val token = Token(user.snowflake!!.id, String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray())), 600000)
+
+        return getRedisObject("tokens", user.snowflake!!.id.toString(), 0, Token::class.java)
+                .next()
+                .switchIfEmpty(
+                        insertAndReturnOriginal("tokens", user.snowflake!!.id.toString(), 0, Flux.just(token))
+                                .next()
+                                .flatMap {
+                                    insertAndReturnOriginal("tokens", token.token!!, 0, Flux.just(token))
+                                            .next()
+                                }
+                )
+    }
+
+    fun checkToken(token: String): Mono<Token> {
+        return getRedisObject("tokens", token, 0, Token::class.java)
+                .next()
     }
 
     data class TranslationKey(val ids: Array<Int>, val sourceLanguage: String)

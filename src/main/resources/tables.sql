@@ -6,11 +6,3 @@ CREATE TABLE IF NOT EXISTS users
     hash      TEXT                        NOT NULL,
     username  TEXT                        NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS userTokens
-(
-    snowflake TEXT                        NOT NULL REFERENCES users (snowflake),
-    token     TEXT                        NOT NULL,
-    expiry    TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (now() AT TIME ZONE 'UTC') + '7',
-    PRIMARY KEY (snowflake, token)
-);

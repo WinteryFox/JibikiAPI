@@ -287,7 +287,7 @@ WHERE sense.entr = :entry
         val hash = BCrypt.hashpw(createUserSpec.password, salt)
 
         return client.execute("INSERT INTO users (snowflake, email, hash, username) VALUES (:snowflake, :email, :hash, :username)")
-                .bind("snowflake", snowflake.id)
+                .bind("snowflake", snowflake.id.toString())
                 .bind("email", createUserSpec.email)
                 .bind("hash", hash)
                 .bind("username", createUserSpec.username)
@@ -312,28 +312,17 @@ WHERE sense.entr = :entry
                 }
     }
 
-    override fun getToken(user: User): Mono<Token> {
-        return client.execute("SELECT token, expiry FROM userTokens WHERE snowflake = :snowflake AND expiry > now() AT TIME ZONE 'UTC'")
-                .bind("snowflake", user.snowflake.id.toString())
+    override fun getUser(snowflake: Snowflake): Mono<User> {
+        return client.execute("SELECT * FROM users WHERE snowflake = :snowflake")
+                .bind("snowflake", snowflake.id.toString())
                 .map { row ->
-                    Token(
-                            row["token"] as String,
-                            row["expiry"] as LocalDateTime
+                    User(
+                            Snowflake((row["snowflake"] as String).toLong()),
+                            row["creation"] as LocalDateTime,
+                            row["username"] as String,
+                            row["email"] as String
                     )
                 }
                 .first()
-    }
-
-    override fun createToken(user: User): Mono<Token> {
-        val token = String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray()))
-        val expiry = LocalDateTime.now().plusDays(7)
-
-        return client.execute("INSERT INTO userTokens (snowflake, token, expiry) VALUES (:snowflake, :token, :expiry)")
-                .bind("snowflake", user.snowflake.id.toString())
-                .bind("token", token)
-                .bind("expiry", expiry)
-                .fetch()
-                .first()
-                .thenReturn(Token(token, expiry))
     }
 }

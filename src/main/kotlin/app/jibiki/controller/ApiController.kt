@@ -1,12 +1,12 @@
 package app.jibiki.controller
 
-import app.jibiki.model.Kanji
-import app.jibiki.model.SentenceBundle
-import app.jibiki.model.Token
-import app.jibiki.model.Word
+import app.jibiki.model.*
 import app.jibiki.persistence.CachingDatabaseAccessor
 import app.jibiki.spec.CreateUserSpec
 import app.jibiki.spec.LoginSpec
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import org.springframework.beans.BeanInstantiationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -68,16 +68,33 @@ class ApiController(
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/login"], consumes = ["application/x-www-form-urlencoded"])
     fun loginUser(
             loginSpec: LoginSpec
-    ): Mono<ResponseEntity<Token>> {
+    ): Mono<ResponseEntity<Void>> {
         return database
                 .checkCredentials(loginSpec.email, loginSpec.password)
-                .flatMap { database.getToken(it).switchIfEmpty(database.createToken(it)) }
-                .map { ResponseEntity.ok().body(it) }
+                .flatMap { database.getToken(it) }
+                .map { ResponseEntity.noContent().header("Set-Cookie", "token=${it.token}; Expires=${it.expiry}; Max-Age=${it.expiry}; SameSite=Strict; HttpOnly").build<Void>() }
                 .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
+    }
+
+    @RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], consumes = ["application/x-www-form-urlencoded"], produces = ["application/json"])
+    fun getMe(
+            @CookieValue("token") token: String
+    ): Mono<User> {
+        return database
+                .checkToken(token)
+                .switchIfEmpty(Mono.error(IllegalArgumentException("Invalid or expired token")))
+                .flatMap {
+                    database.getUser(Snowflake(it.snowflake!!))
+                }
     }
 
     @ExceptionHandler(BeanInstantiationException::class)
     fun handleBeans(): ResponseEntity<String> {
         return ResponseEntity.badRequest().build()
+    }
+
+    @ExceptionHandler(IllegalArgumentException::class)
+    fun handleIllegalArgument(exception: IllegalArgumentException): ResponseEntity<String> {
+        return ResponseEntity.badRequest().body("{\"message\": \"${exception.message}\"}")
     }
 }

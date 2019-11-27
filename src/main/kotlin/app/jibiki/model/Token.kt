@@ -1,8 +1,7 @@
 package app.jibiki.model
 
-import java.time.LocalDateTime
-
 data class Token(
-        val token: String,
-        val expiry: LocalDateTime
+        val snowflake: Long? = null,
+        val token: String? = null,
+        val expiry: Int? = null
 )
