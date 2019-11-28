@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.time.LocalDateTime
-import java.util.*
 import kotlin.streams.toList
 
 @Repository
@@ -287,7 +286,7 @@ WHERE sense.entr = :entry
         val hash = BCrypt.hashpw(createUserSpec.password, salt)
 
         return client.execute("INSERT INTO users (snowflake, email, hash, username) VALUES (:snowflake, :email, :hash, :username)")
-                .bind("snowflake", snowflake.id.toString())
+                .bind("snowflake", snowflake.snowflake.toString())
                 .bind("email", createUserSpec.email)
                 .bind("hash", hash)
                 .bind("username", createUserSpec.username)
@@ -304,7 +303,7 @@ WHERE sense.entr = :entry
                 .filter { BCrypt.checkpw(password, it["hash"] as String) }
                 .map {
                     User(
-                            Snowflake((it["snowflake"] as String).toLong()),
+                            (it["snowflake"] as String).toLong(),
                             it["creation"] as LocalDateTime,
                             it["username"] as String,
                             it["email"] as String
@@ -314,10 +313,10 @@ WHERE sense.entr = :entry
 
     override fun getUser(snowflake: Snowflake): Mono<User> {
         return client.execute("SELECT * FROM users WHERE snowflake = :snowflake")
-                .bind("snowflake", snowflake.id.toString())
+                .bind("snowflake", snowflake.snowflake.toString())
                 .map { row ->
                     User(
-                            Snowflake((row["snowflake"] as String).toLong()),
+                            (row["snowflake"] as String).toLong(),
                             row["creation"] as LocalDateTime,
                             row["username"] as String,
                             row["email"] as String

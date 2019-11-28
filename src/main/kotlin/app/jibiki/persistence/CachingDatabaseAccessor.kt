@@ -165,21 +165,21 @@ class CachingDatabaseAccessor(
     override fun getUser(snowflake: Snowflake): Mono<User> {
         return getRedisObjectOrCache(
                 "users",
-                snowflake.id.toString(),
+                snowflake.snowflake.toString(),
                 0,
-                snowflake.id.toString(),
+                snowflake.snowflake.toString(),
                 User::class.java,
                 Function { Flux.from(database.getUser(snowflake)) }
         ).next()
     }
 
     fun getToken(user: User): Mono<Token> {
-        val token = Token(user.snowflake!!.id, String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray())), 600000)
+        val token = Token(user.snowflake, String(Base64.getEncoder().encode(UUID.randomUUID().toString().toByteArray())), 600000)
 
-        return getRedisObject("tokens", user.snowflake.id.toString(), 0, Token::class.java)
+        return getRedisObject("tokens", user.snowflake.toString(), 0, Token::class.java)
                 .next()
                 .switchIfEmpty(
-                        insertAndReturnOriginal("tokens", user.snowflake.id.toString(), 0, Flux.just(token))
+                        insertAndReturnOriginal("tokens", user.snowflake.toString(), 0, Flux.just(token))
                                 .next()
                                 .flatMap {
                                     insertAndReturnOriginal("tokens", token.token!!, 0, Flux.just(token))

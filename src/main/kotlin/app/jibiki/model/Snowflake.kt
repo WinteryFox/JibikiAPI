@@ -1,10 +1,10 @@
 package app.jibiki.model
 
 class Snowflake(
-        val id: Long? = null
+        val snowflake: Long? = null
 ) {
     override fun toString(): String {
-        return id.toString()
+        return snowflake.toString()
     }
 
     companion object {
