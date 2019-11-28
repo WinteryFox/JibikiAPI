@@ -162,12 +162,12 @@ class CachingDatabaseAccessor(
         return database.checkCredentials(email, password)
     }
 
-    override fun getUser(snowflake: Snowflake): Mono<User> {
+    override fun getUser(snowflake: String): Mono<User> {
         return getRedisObjectOrCache(
                 "users",
-                snowflake.snowflake.toString(),
+                snowflake,
                 0,
-                snowflake.snowflake.toString(),
+                snowflake,
                 User::class.java,
                 Function { Flux.from(database.getUser(snowflake)) }
         ).next()

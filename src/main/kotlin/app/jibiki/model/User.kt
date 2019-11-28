@@ -1,10 +1,9 @@
 package app.jibiki.model
 
-import com.fasterxml.jackson.annotation.JsonUnwrapped
 import java.time.LocalDateTime
 
 data class User(
-        val snowflake: Long? = null,
+        val snowflake: String? = null,
         val creation: LocalDateTime? = null,
         val username: String? = null,
         val email: String? = null

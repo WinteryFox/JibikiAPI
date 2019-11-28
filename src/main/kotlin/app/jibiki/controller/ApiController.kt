@@ -1,6 +1,9 @@
 package app.jibiki.controller
 
-import app.jibiki.model.*
+import app.jibiki.model.Kanji
+import app.jibiki.model.SentenceBundle
+import app.jibiki.model.User
+import app.jibiki.model.Word
 import app.jibiki.persistence.CachingDatabaseAccessor
 import app.jibiki.spec.CreateUserSpec
 import app.jibiki.spec.LoginSpec
@@ -11,7 +14,7 @@ import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
-@CrossOrigin
+@CrossOrigin(allowCredentials = "true")
 @RestController
 class ApiController(
         private val database: CachingDatabaseAccessor
@@ -80,7 +83,7 @@ class ApiController(
         return database
                 .checkToken(token)
                 .switchIfEmpty(Mono.error(IllegalArgumentException("Invalid or expired token")))
-                .flatMap { database.getUser(Snowflake(it.snowflake!!)) }
+                .flatMap { database.getUser(it.snowflake!!) }
     }
 
     @ExceptionHandler(BeanInstantiationException::class)

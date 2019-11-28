@@ -303,7 +303,7 @@ WHERE sense.entr = :entry
                 .filter { BCrypt.checkpw(password, it["hash"] as String) }
                 .map {
                     User(
-                            (it["snowflake"] as String).toLong(),
+                            it["snowflake"] as String,
                             it["creation"] as LocalDateTime,
                             it["username"] as String,
                             it["email"] as String
@@ -311,12 +311,12 @@ WHERE sense.entr = :entry
                 }
     }
 
-    override fun getUser(snowflake: Snowflake): Mono<User> {
+    override fun getUser(snowflake: String): Mono<User> {
         return client.execute("SELECT * FROM users WHERE snowflake = :snowflake")
-                .bind("snowflake", snowflake.snowflake.toString())
+                .bind("snowflake", snowflake)
                 .map { row ->
                     User(
-                            (row["snowflake"] as String).toLong(),
+                            row["snowflake"] as String,
                             row["creation"] as LocalDateTime,
                             row["username"] as String,
                             row["email"] as String
