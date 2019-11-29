@@ -72,7 +72,7 @@ class ApiController(
         return database
                 .checkCredentials(loginSpec.email, loginSpec.password)
                 .flatMap { database.getToken(it) }
-                .map { ResponseEntity.noContent().header("Set-Cookie", "token=${it.token}; Expires=${it.expiry}; Max-Age=${it.expiry}; SameSite=Strict; HttpOnly").build<Void>() }
+                .map { ResponseEntity.noContent().header("Set-Cookie", "token=${it.token}; Expires=${it.expiry}; Max-Age=${it.expiry}; SameSite=Strict; HttpOnly; Secure").build<Void>() }
                 .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
     }
 
