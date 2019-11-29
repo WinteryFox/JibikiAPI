@@ -86,6 +86,15 @@ class ApiController(
                 .flatMap { database.getUser(it.snowflake!!) }
     }
 
+    @RequestMapping(method = [RequestMethod.DELETE], value = ["/users/logout"])
+    fun logout(
+            @CookieValue("token") token: String
+    ): Mono<ResponseEntity<Void>> {
+        return database
+                .invalidateToken(token)
+                .thenReturn(ResponseEntity.noContent().header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
+    }
+
     @ExceptionHandler(BeanInstantiationException::class)
     fun handleBeans(): ResponseEntity<String> {
         return ResponseEntity.badRequest().build()

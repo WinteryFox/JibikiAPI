@@ -69,6 +69,14 @@ class CachingDatabaseAccessor(
                 .then(cache)
     }
 
+    private fun deleteKey(
+            functionKey: String,
+            redisKey: String,
+            page: Int
+    ): Mono<Long> {
+        return redis.del(functionKey + "_" + redisKey + "_" + page)
+    }
+
     override fun getSentences(query: String, page: Int): Flux<SentenceBundle> {
         return getRedisObjectOrCache(
                 "sentences",
@@ -171,6 +179,18 @@ class CachingDatabaseAccessor(
                 User::class.java,
                 Function { Flux.from(database.getUser(snowflake)) }
         ).next()
+    }
+
+    fun invalidateToken(token: String): Mono<Void> {
+        return getRedisObject("tokens", token, 0, Token::class.java)
+                .next()
+                .flatMap {
+                    deleteKey("tokens", it.token!!, 0)
+                            .flatMap { _ ->
+                                deleteKey("tokens", it.snowflake!!, 0)
+                            }
+                }
+                .then()
     }
 
     fun getToken(user: User): Mono<Token> {
