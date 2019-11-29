@@ -76,7 +76,7 @@ class ApiController(
                 .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
     }
 
-    @RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], consumes = ["application/x-www-form-urlencoded"], produces = ["application/json"])
+    @RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
     fun getMe(
             @CookieValue("token") token: String
     ): Mono<User> {
