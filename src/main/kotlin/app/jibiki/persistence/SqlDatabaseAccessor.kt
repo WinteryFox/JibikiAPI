@@ -108,10 +108,11 @@ FROM character
                     WHERE type = 'ja_on'
                     GROUP BY character) onyomi ON character.id = onyomi.character
          LEFT JOIN miscellaneous misc on character.id = misc.character
-WHERE literal = :kanji OR lower(:kanji) = ANY(meaning.meaning) OR hiragana(:kanji) = ANY(kunyomi.reading) OR katakana(:kanji) = ANY(onyomi.reading)
+WHERE literal = :kanji OR lower(:kanji) = ANY(meaning.meaning) OR hiragana(:hiragana) = ANY(kunyomi.reading) OR katakana(:hiragana) = ANY(onyomi.reading)
 LIMIT :pageSize
 """)
                 .bind("pageSize", pageSize)
+                .bind("hiragana", converter.convertRomajiToHiragana(kanji))
                 .bind("kanji", kanji)
                 .map { row, _ ->
                     Kanji(
