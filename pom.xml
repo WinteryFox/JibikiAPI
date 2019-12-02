@@ -9,14 +9,14 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>app.jibiki</groupId>
-    <artifactId>jibiki</artifactId>
+    <artifactId>JibikiAPI</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>jibiki</name>
+    <name>JibikiAPI</name>
     <description>Japanese-English dictionary app</description>
 
     <properties>
-        <java.version>1.8</java.version>
-        <kotlin.version>1.3.50</kotlin.version>
+        <java.version>12</java.version>
+        <kotlin.version>1.3.61</kotlin.version>
     </properties>
 
     <dependencies>

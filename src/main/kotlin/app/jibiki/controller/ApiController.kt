@@ -59,10 +59,10 @@ class ApiController(
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
     fun createUser(
             createUserSpec: CreateUserSpec
-    ): Mono<ResponseEntity<HttpStatus>> {
+    ): Mono<ResponseEntity<Void>> {
         return database
                 .createUser(createUserSpec)
-                .map { ResponseEntity<HttpStatus>(it) }
+                .map { ResponseEntity.status(it).build<Void>() }
     }
 
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/login"], consumes = ["application/x-www-form-urlencoded"])
