@@ -2,6 +2,7 @@ package app.jibiki.persistence
 
 import app.jibiki.model.*
 import app.jibiki.spec.CreateUserSpec
+import com.fasterxml.jackson.databind.JsonNode
 import org.springframework.http.HttpStatus
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -10,8 +11,7 @@ interface Database {
     val pageSize: Int
         get() = 50
 
-    fun getSentences(query: String, page: Int): Flux<SentenceBundle>
-    fun getTranslations(ids: Array<Int>, sourceLanguage: String): Flux<Sentence>
+    fun getSentences(query: String, page: Int): Mono<JsonNode>
     fun getKanji(kanji: String): Flux<Kanji>
     fun getEntriesForWord(word: String, page: Int): Flux<Int>
     fun getEntry(id: Int): Mono<Word>

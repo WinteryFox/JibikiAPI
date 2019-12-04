@@ -2,14 +2,17 @@ package app.jibiki.persistence
 
 import app.jibiki.model.*
 import app.jibiki.spec.CreateUserSpec
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import io.lettuce.core.RedisClient
+import org.reactivestreams.Publisher
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.core.publisher.toMono
 import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.function.Function
@@ -40,7 +43,7 @@ class CachingDatabaseAccessor(
             originalKey: K,
             `class`: Class<O>,
             dbSupplier: Function<K, Flux<O>>
-    ): Flux<O> {
+    ): Publisher<O> {
         return getRedisObject(
                 functionKey,
                 redisKey,
@@ -77,30 +80,16 @@ class CachingDatabaseAccessor(
         return redis.del(functionKey + "_" + redisKey + "_" + page)
     }
 
-    override fun getSentences(query: String, page: Int): Flux<SentenceBundle> {
+    override fun getSentences(query: String, page: Int): Mono<JsonNode> {
         return getRedisObjectOrCache(
                 "sentences",
                 query.toLowerCase(),
                 page,
                 query,
-                RedisSentenceBundle::class.java,
+                JsonNode::class.java,
                 Function {
                     database.getSentences(it, page)
-                            .map { bundle -> RedisSentenceBundle(bundle.sentence, bundle.translations) }
                 }
-        )
-                .map { SentenceBundle(it.sentence, it.translations) }
-    }
-
-    override fun getTranslations(ids: Array<Int>, sourceLanguage: String): Flux<Sentence> {
-        val redisKey = sourceLanguage + "_" + ids.joinToString("_")
-        return getRedisObjectOrCache(
-                "translations",
-                redisKey.toLowerCase(),
-                0,
-                TranslationKey(ids, sourceLanguage),
-                Sentence::class.java,
-                Function { database.getTranslations(it.ids, it.sourceLanguage) }
         )
     }
 

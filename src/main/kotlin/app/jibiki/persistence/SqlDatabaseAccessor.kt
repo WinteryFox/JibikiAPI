@@ -2,6 +2,7 @@ package app.jibiki.persistence
 
 import app.jibiki.model.*
 import app.jibiki.spec.CreateUserSpec
+import com.fasterxml.jackson.databind.JsonNode
 import com.moji4j.MojiConverter
 import org.mindrot.jbcrypt.BCrypt
 import org.springframework.beans.factory.annotation.Autowired
@@ -19,64 +20,33 @@ class SqlDatabaseAccessor : Database {
     private lateinit var client: DatabaseClient
     private val converter = MojiConverter()
 
-    override fun getSentences(query: String, page: Int): Flux<SentenceBundle> {
+    override fun getSentences(query: String, page: Int): Mono<JsonNode> {
         return client
                 .execute("""
-SELECT s.id,
-       s.lang,
-       s.sentence,
-       array_remove(array_agg(l.translation), NULL) translations
+SELECT json_build_object(
+               'id', s.id,
+               'language', s.lang,
+               'sentence', s.sentence,
+               'translations', json_agg(json_build_object('id', t.id, 'language', t.lang, 'sentence', t.sentence))
+           )
 FROM sentences s
-         LEFT JOIN plainto_tsquery('japanese', :q) q ON TRUE
-         LEFT JOIN ts_rank_cd(s.tsv, q) score ON TRUE
-         LEFT JOIN links l ON l.source = s.id
-WHERE s.tsv @@ q AND (s.lang = 'jpn' OR s.lang='eng')
-GROUP BY s.id, q, score
-ORDER BY score DESC
-LIMIT :pageSize OFFSET :page
+         LEFT JOIN links l
+                   ON l.source = s.id
+         JOIN (SELECT * FROM sentences) t ON t.id = l.translation
+WHERE s.tsv @@ plainto_tsquery('japanese', :q)
+  AND (s.lang = 'eng' OR s.lang = 'jpn')
+GROUP BY s.id, s.tsv
+ORDER BY ts_rank_cd(s.tsv, plainto_tsquery('japanese', :q)) DESC
+LIMIT :pageSize
+OFFSET
+:page
                 """)
                 .bind("pageSize", pageSize)
                 .bind("page", page * pageSize)
                 .bind("q", query)
                 .fetch()
-                .all()
-                .flatMap { row ->
-                    getTranslations(row["translations"] as Array<Int>, row["lang"] as String)
-                            .collectList()
-                            .filter { it.isNotEmpty() }
-                            .map {
-                                SentenceBundle(
-                                        Sentence(
-                                                row["id"] as Int,
-                                                row["lang"] as String,
-                                                row["sentence"] as String
-                                        ),
-                                        it
-                                )
-                            }
-                }
-    }
-
-    override fun getTranslations(ids: Array<Int>, sourceLanguage: String): Flux<Sentence> {
-        if (ids.isEmpty())
-            return Flux.empty()
-
-        return client
-                .execute("""
-SELECT s.id, s.lang, s.sentence
-FROM sentences s
-WHERE s.id = ANY (:ids) AND (s.lang = 'jpn' OR s.lang='eng') AND (s.lang != :source)
-                """)
-                .bind("ids", ids)
-                .bind("source", sourceLanguage)
-                .map { row ->
-                    Sentence(
-                            row["id"] as Int,
-                            row["lang"] as String,
-                            row["sentence"] as String
-                    )
-                }
-                .all()
+                .first()
+                .ofType(JsonNode::class.java)
     }
 
     override fun getKanji(kanji: String): Flux<Kanji> {
@@ -271,9 +241,7 @@ WHERE sense.entr = :entry
     }
 
     fun userExists(email: String): Mono<Boolean> {
-        return client.execute("""
-                    SELECT count(*) FROM users WHERE email = :email
-                """)
+        return client.execute("SELECT count(*) FROM users WHERE email = :email")
                 .bind("email", email)
                 .map { row ->
                     row["count"] as Long > 0
