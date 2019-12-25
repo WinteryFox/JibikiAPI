@@ -1,62 +1,62 @@
 package app.jibiki.controller
 
-import app.jibiki.model.Kanji
-import app.jibiki.model.SentenceBundle
-import app.jibiki.model.User
-import app.jibiki.model.Word
-import app.jibiki.persistence.CachingDatabaseAccessor
-import app.jibiki.spec.CreateUserSpec
-import app.jibiki.spec.LoginSpec
+import app.jibiki.persistence.DatabaseAccessor
 import org.springframework.beans.BeanInstantiationException
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
-import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 @CrossOrigin(allowCredentials = "true")
 @RestController
 class ApiController(
-        private val database: CachingDatabaseAccessor
+        private val database: DatabaseAccessor
 ) {
     @RequestMapping(method = [RequestMethod.GET], value = ["/sentences"], produces = ["application/json"])
     fun sentenceSearch(
-            @RequestParam("query") query: String,
-            @RequestParam("page", defaultValue = "0") page: Int,
-            @RequestParam("minLength", defaultValue = "0") minLength: Int,
-            @RequestParam("maxLength", defaultValue = "0") maxLength: Int
-    ): Flux<SentenceBundle> {
+            @RequestParam("query")
+            query: String,
+            @RequestParam("page", defaultValue = "0")
+            page: Int,
+            @RequestParam("minLength", defaultValue = "0")
+            minLength: Int,
+            @RequestParam("maxLength", defaultValue = "10000")
+            maxLength: Int,
+            @RequestParam("source", defaultValue = "eng")
+            source: String,
+            @RequestParam("target", defaultValue = "jpn")
+            target: String
+    ): Mono<String> {
         if (query.isEmpty())
-            return Flux.empty()
+            return Mono.just("[]")
 
-        return database.getSentences(query, page)
-                .filter { it.sentence.sentence.length >= minLength }
-                .filter { if (maxLength != 0) it.sentence.sentence.length <= maxLength else true }
+        return database.getSentences(query, page, minLength, maxLength, source, target)
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
     fun wordSearch(
-            @RequestParam("query") query: String,
-            @RequestParam("page", defaultValue = "0") page: Int
-    ): Flux<Word> {
+            @RequestParam("query")
+            query: String,
+            @RequestParam("page", defaultValue = "0")
+            page: Int
+    ): Mono<String> {
         if (query.isEmpty())
-            return Flux.empty()
+            return Mono.just("[]")
 
-        return database.getEntriesForWord(query, page)
-                .flatMapSequential { database.getEntry(it) }
+        return database.getWords(query, page)
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/kanji"], produces = ["application/json"])
     fun kanjiSearch(
             @RequestParam("query") query: String
-    ): Flux<Kanji> {
+    ): Mono<String> {
         if (query.isEmpty())
-            return Flux.empty()
+            return Mono.just("[]")
 
-        return database.getKanji(query)
+        //return database.getKanji(query)
+        return Mono.empty()
     }
 
-    @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
+    /*@RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
     fun createUser(
             createUserSpec: CreateUserSpec
     ): Mono<ResponseEntity<HttpStatus>> {
@@ -93,15 +93,10 @@ class ApiController(
         return database
                 .invalidateToken(token)
                 .thenReturn(ResponseEntity.noContent().header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
-    }
+    }*/
 
     @ExceptionHandler(BeanInstantiationException::class)
     fun handleBeans(): ResponseEntity<String> {
         return ResponseEntity.badRequest().build()
-    }
-
-    @ExceptionHandler(IllegalArgumentException::class)
-    fun handleIllegalArgument(exception: IllegalArgumentException): ResponseEntity<String> {
-        return ResponseEntity.badRequest().body("{\"message\": \"${exception.message}\"}")
     }
 }

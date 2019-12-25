@@ -52,11 +52,6 @@
 
         <dependency>
             <groupId>io.r2dbc</groupId>
-            <artifactId>r2dbc-postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.r2dbc</groupId>
             <artifactId>r2dbc-pool</artifactId>
             <scope>runtime</scope>
         </dependency>
