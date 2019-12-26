@@ -100,4 +100,68 @@ WHERE entry.id = ANY (SELECT entries.entr
                 .first()
                 .map { (it["json"] as Json).asString() }
     }
+
+    fun getKanji(query: String, page: Int): Mono<String> {
+        return client.execute("""
+SELECT coalesce(json_agg(json_build_object(
+        'id', character.id,
+        'literal', character.literal,
+        'definitions', meaning.json,
+        'readings', json_build_object(
+                'onyomi', onyomi.json,
+                'kunyomi', kunyomi.json
+            ),
+        'miscellaneous', json_build_object(
+                'grade', misc.grade,
+                'stroke_count', misc.stroke_count,
+                'frequency', misc.frequency,
+                'variant_type', misc.variant_type,
+                'variant', misc.variant,
+                'jlpt', misc.jlpt,
+                'radical_name', misc.radical_name
+            )
+    )), '[]'::json) json
+FROM character
+         LEFT JOIN (SELECT character, json_agg(meaning) json
+                    FROM meaning
+                    WHERE language = 'en'
+                    GROUP BY character) meaning
+                   ON meaning.character = character.id
+         LEFT JOIN (SELECT character, json_agg(reading) json
+                    FROM reading
+                    WHERE type = 'ja_on'
+                    GROUP BY character) onyomi
+                   ON onyomi.character = character.id
+         LEFT JOIN (SELECT character, json_agg(reading) json
+                    FROM reading
+                    WHERE type = 'ja_kun'
+                    GROUP BY character) kunyomi
+                   ON kunyomi.character = character.id
+         LEFT JOIN (SELECT * FROM miscellaneous) misc on character.id = misc.character
+WHERE character.id = ANY (
+    SELECT character
+    FROM meaning
+    WHERE lower(meaning) = lower(:query)
+    UNION
+    SELECT character
+    FROM reading
+    WHERE reading = hiragana(:japanese)
+       OR reading = katakana(:japanese)
+    UNION
+    SELECT id
+    FROM character
+    WHERE literal = :query
+)
+LIMIT :pageSize
+OFFSET
+:page * :pageSize
+        """)
+                .bind("pageSize", pageSize)
+                .bind("page", page)
+                .bind("query", query)
+                .bind("japanese", converter.convertRomajiToHiragana(query))
+                .fetch()
+                .first()
+                .map { (it["json"] as Json).asString() }
+    }
 }

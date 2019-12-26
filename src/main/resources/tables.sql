@@ -6,7 +6,7 @@ CREATE INDEX IF NOT EXISTS trgm_kanji_index ON kanj USING GIN (txt gin_trgm_ops)
 
 CREATE INDEX IF NOT EXISTS trgm_reading_index ON rdng USING GIN (txt gin_trgm_ops);
 
-CREATE INDEX trgm_gloss_index ON gloss (regexp_replace(txt, '\s\(.*\)', ''));
+CREATE INDEX IF NOT EXISTS trgm_gloss_index ON gloss (regexp_replace(txt, '\s\(.*\)', ''));
 
 CREATE INDEX IF NOT EXISTS gloss_index ON gloss (entr, sens, txt);
 

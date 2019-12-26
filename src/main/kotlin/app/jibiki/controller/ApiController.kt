@@ -47,13 +47,15 @@ class ApiController(
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/kanji"], produces = ["application/json"])
     fun kanjiSearch(
-            @RequestParam("query") query: String
+            @RequestParam("query")
+            query: String,
+            @RequestParam("page", defaultValue = "0")
+            page: Int
     ): Mono<String> {
         if (query.isEmpty())
             return Mono.just("[]")
 
-        //return database.getKanji(query)
-        return Mono.empty()
+        return database.getKanji(query, page)
     }
 
     /*@RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
