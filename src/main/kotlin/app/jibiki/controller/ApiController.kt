@@ -102,8 +102,10 @@ class ApiController(
     fun getMe(
             @CookieValue("token")
             token: String
-    ): Mono<String> {
+    ): Mono<ResponseEntity<String>> {
         return database
                 .getSelf(token)
+                .map { ResponseEntity.status(HttpStatus.OK).body(it) }
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
     }
 }
