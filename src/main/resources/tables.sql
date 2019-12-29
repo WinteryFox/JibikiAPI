@@ -1,3 +1,4 @@
+CREATE EXTENSION pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE INDEX IF NOT EXISTS trgm_gloss_index ON gloss USING GIN (txt gin_trgm_ops);
@@ -69,8 +70,14 @@ VACUUM ANALYZE mv_forms;
 CREATE TABLE IF NOT EXISTS users
 (
     snowflake TEXT                        NOT NULL PRIMARY KEY,
-    creation  TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (now() AT TIME ZONE 'UTC'),
     email     TEXT                        NOT NULL,
     hash      TEXT                        NOT NULL,
     username  TEXT                        NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS userTokens
+(
+    snowflake TEXT NOT NULL REFERENCES users (snowflake),
+    token TEXT NOT NULL,
+    PRIMARY KEY (snowflake, token)
+)

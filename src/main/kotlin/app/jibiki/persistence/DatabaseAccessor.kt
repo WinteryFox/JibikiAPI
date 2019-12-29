@@ -1,7 +1,9 @@
 package app.jibiki.persistence
 
+import app.jibiki.model.Snowflake
 import com.moji4j.MojiConverter
 import io.r2dbc.postgresql.codec.Json
+import org.mindrot.jbcrypt.BCrypt
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
@@ -138,20 +140,18 @@ FROM character
                     GROUP BY character) kunyomi
                    ON kunyomi.character = character.id
          LEFT JOIN (SELECT * FROM miscellaneous) misc on character.id = misc.character
-WHERE character.id = ANY (
-    SELECT character
-    FROM meaning
-    WHERE lower(meaning) = lower(:query)
-    UNION
-    SELECT character
-    FROM reading
-    WHERE reading = hiragana(:japanese)
-       OR reading = katakana(:japanese)
-    UNION
-    SELECT id
-    FROM character
-    WHERE literal = :query
-)
+WHERE character.id = ANY (SELECT character
+                          FROM meaning
+                          WHERE lower(meaning) = lower(:query)
+                          UNION
+                          SELECT character
+                          FROM reading
+                          WHERE reading = hiragana(:japanese)
+                             OR reading = katakana(:japanese)
+                          UNION
+                          SELECT id
+                          FROM character
+                          WHERE literal = :query)
 LIMIT :pageSize
 OFFSET
 :page * :pageSize
@@ -163,5 +163,42 @@ OFFSET
                 .fetch()
                 .first()
                 .map { (it["json"] as Json).asString() }
+    }
+
+    fun createUser(username: String, email: String, password: String): Mono<String> {
+        return client.execute("""
+INSERT INTO users (snowflake, email, hash, username)
+SELECT :snowflake, :email, crypt(:password, gen_salt('md5')), :username
+WHERE NOT EXISTS(
+        SELECT * FROM users WHERE email = :email
+    )
+RETURNING json_build_object(
+        'snowflake', snowflake
+    ) json
+        """)
+                .bind("snowflake", Snowflake.next().toString())
+                .bind("email", email)
+                .bind("password", password)
+                .bind("username", username)
+                .fetch()
+                .first()
+                .map { (it["json"] as Json).asString() }
+    }
+
+    fun createToken(email: String, password: String): Mono<String> {
+        return client.execute("""
+INSERT INTO userTokens (snowflake, token)
+SELECT users.snowflake, gen_random_uuid() token
+FROM users
+WHERE EXISTS(
+              SELECT snowflake FROM users WHERE email = :email AND hash = crypt(:password, hash)
+          )
+RETURNING token
+        """)
+                .bind("email", email)
+                .bind("password", password)
+                .fetch()
+                .first()
+                .map { it["token"] as String }
     }
 }

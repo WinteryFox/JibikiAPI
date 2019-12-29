@@ -2,9 +2,12 @@ package app.jibiki.controller
 
 import app.jibiki.persistence.DatabaseAccessor
 import org.springframework.beans.BeanInstantiationException
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Mono
+import java.net.http.HttpResponse
 
 @CrossOrigin(allowCredentials = "true")
 @RestController
@@ -58,27 +61,36 @@ class ApiController(
         return database.getKanji(query, page)
     }
 
-    /*@RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
+    @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
     fun createUser(
-            createUserSpec: CreateUserSpec
-    ): Mono<ResponseEntity<HttpStatus>> {
-        return database
-                .createUser(createUserSpec)
-                .map { ResponseEntity<HttpStatus>(it) }
+            exchange: ServerWebExchange
+    ): Mono<ResponseEntity<String>> {
+        return exchange.formData.flatMap {
+            database
+                    .createUser(it["username"]!![0], it["email"]!![0], it["password"]!![0])
+                    .map { json -> ResponseEntity.status(HttpStatus.CREATED).body(json) }
+                    .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).build()))
+        }
     }
 
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/login"], consumes = ["application/x-www-form-urlencoded"])
     fun loginUser(
-            loginSpec: LoginSpec
-    ): Mono<ResponseEntity<Void>> {
-        return database
-                .checkCredentials(loginSpec.email, loginSpec.password)
-                .flatMap { database.getToken(it) }
-                .map { ResponseEntity.noContent().header("Set-Cookie", "token=${it.token}; Expires=${it.expiry}; Max-Age=${it.expiry}; SameSite=Strict; HttpOnly; Secure").build<Void>() }
-                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
+            exchange: ServerWebExchange
+    ): Mono<ResponseEntity<String>> {
+        return exchange.formData.flatMap {
+            database
+                    .createToken(it["email"]!![0], it["password"]!![0])
+                    .map { token ->
+                        ResponseEntity
+                                .status(HttpStatus.CREATED)
+                                .header("Set-Cookie", "token=$token; SameSite=Strict; HttpOnly; Secure")
+                                .build<String>()
+                    }
+                    .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+        }
     }
 
-    @RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
+    /*@RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
     fun getMe(
             @CookieValue("token") token: String
     ): Mono<User> {
@@ -96,9 +108,4 @@ class ApiController(
                 .invalidateToken(token)
                 .thenReturn(ResponseEntity.noContent().header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
     }*/
-
-    @ExceptionHandler(BeanInstantiationException::class)
-    fun handleBeans(): ResponseEntity<String> {
-        return ResponseEntity.badRequest().build()
-    }
 }
