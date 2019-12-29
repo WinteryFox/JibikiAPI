@@ -201,4 +201,16 @@ RETURNING token
                 .first()
                 .map { it["token"] as String }
     }
+
+    fun deleteToken(token: String): Mono<Void> {
+        return client.execute("""
+DELETE
+FROM userTokens
+WHERE token = :token
+        """)
+                .bind("token", token)
+                .fetch()
+                .first()
+                .then()
+    }
 }

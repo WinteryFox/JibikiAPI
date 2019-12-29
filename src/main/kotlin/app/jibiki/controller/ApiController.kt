@@ -1,13 +1,11 @@
 package app.jibiki.controller
 
 import app.jibiki.persistence.DatabaseAccessor
-import org.springframework.beans.BeanInstantiationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Mono
-import java.net.http.HttpResponse
 
 @CrossOrigin(allowCredentials = "true")
 @RestController
@@ -90,6 +88,16 @@ class ApiController(
         }
     }
 
+    @RequestMapping(method = [RequestMethod.DELETE], value = ["/users/logout"])
+    fun logout(
+            @CookieValue("token")
+            token: String
+    ): Mono<ResponseEntity<Void>> {
+        return database
+                .deleteToken(token)
+                .thenReturn(ResponseEntity.noContent().header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
+    }
+
     /*@RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
     fun getMe(
             @CookieValue("token") token: String
@@ -98,14 +106,5 @@ class ApiController(
                 .checkToken(token)
                 .switchIfEmpty(Mono.error(IllegalArgumentException("Invalid or expired token")))
                 .flatMap { database.getUser(it.snowflake!!) }
-    }
-
-    @RequestMapping(method = [RequestMethod.DELETE], value = ["/users/logout"])
-    fun logout(
-            @CookieValue("token") token: String
-    ): Mono<ResponseEntity<Void>> {
-        return database
-                .invalidateToken(token)
-                .thenReturn(ResponseEntity.noContent().header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
     }*/
 }
