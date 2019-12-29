@@ -98,13 +98,12 @@ class ApiController(
                 .thenReturn(ResponseEntity.noContent().header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
     }
 
-    /*@RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
+    @RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
     fun getMe(
-            @CookieValue("token") token: String
-    ): Mono<User> {
+            @CookieValue("token")
+            token: String
+    ): Mono<String> {
         return database
-                .checkToken(token)
-                .switchIfEmpty(Mono.error(IllegalArgumentException("Invalid or expired token")))
-                .flatMap { database.getUser(it.snowflake!!) }
-    }*/
+                .getSelf(token)
+    }
 }

@@ -213,4 +213,20 @@ WHERE token = :token
                 .first()
                 .then()
     }
+
+    fun getSelf(token: String): Mono<String> {
+        return client.execute("""
+SELECT json_build_object(
+               'snowflake', snowflake,
+               'email', email,
+               'username', username
+           ) json
+FROM users
+WHERE EXISTS(SELECT snowflake FROM userTokens WHERE token = :token)
+        """)
+                .bind("token", token)
+                .fetch()
+                .first()
+                .map { (it["json"] as Json).asString() }
+    }
 }
