@@ -3,7 +3,6 @@ package app.jibiki.persistence
 import app.jibiki.model.Snowflake
 import com.moji4j.MojiConverter
 import io.r2dbc.postgresql.codec.Json
-import org.mindrot.jbcrypt.BCrypt
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
@@ -222,7 +221,9 @@ SELECT json_build_object(
                'username', username
            ) json
 FROM users
-WHERE EXISTS(SELECT snowflake FROM userTokens WHERE token = :token)
+WHERE EXISTS(
+              SELECT snowflake FROM userTokens WHERE token = :token
+          )
         """)
                 .bind("token", token)
                 .fetch()

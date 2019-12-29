@@ -1,4 +1,5 @@
-CREATE EXTENSION pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE INDEX IF NOT EXISTS trgm_gloss_index ON gloss USING GIN (txt gin_trgm_ops);
@@ -80,4 +81,4 @@ CREATE TABLE IF NOT EXISTS userTokens
     snowflake TEXT NOT NULL REFERENCES users (snowflake),
     token TEXT NOT NULL,
     PRIMARY KEY (snowflake, token)
-)
+);
