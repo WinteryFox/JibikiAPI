@@ -20,11 +20,13 @@ class DatabaseAccessor {
         return client.execute("""
 SELECT coalesce(json_agg(json.json), '[]'::json) json
 FROM (SELECT json_build_object(
-                     'id', entry.id,
-                     'forms', forms.json,
-                     'senses', senses.json,
-                     'example', example.json,
-                     'kanji', coalesce(json_agg(kanji.json), '[]'::json)
+                     'word', json_build_object(
+                'id', entry.id,
+                'forms', forms.json,
+                'senses', senses.json
+            ),
+                     'sentence', example.json,
+                     'kanji', coalesce(array_to_json(array_remove(array_agg(kanji.json), null)), '[]'::json)
                  ) json
       FROM entr entry
                JOIN mv_forms forms
