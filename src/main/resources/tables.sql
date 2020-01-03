@@ -12,6 +12,72 @@ CREATE INDEX IF NOT EXISTS trgm_gloss_index ON gloss (regexp_replace(txt, '\s\(.
 
 CREATE INDEX IF NOT EXISTS gloss_index ON gloss (entr, sens, txt);
 
+CREATE MATERIALIZED VIEW mv_kanji AS
+SELECT json_build_object(
+               'id', character.id,
+               'literal', character.literal,
+               'definitions', meaning.json,
+               'readings', json_build_object(
+                       'onyomi', onyomi.json,
+                       'kunyomi', kunyomi.json
+                   ),
+               'miscellaneous', json_build_object(
+                       'grade', misc.grade,
+                       'stroke_count', misc.stroke_count,
+                       'frequency', misc.frequency,
+                       'variant_type', misc.variant_type,
+                       'variant', misc.variant,
+                       'jlpt', misc.jlpt,
+                       'radical_name', misc.radical_name
+                   )
+           )::jsonb json
+FROM character
+         LEFT JOIN (SELECT character, json_agg(meaning) json
+                    FROM meaning
+                    WHERE language = 'en'
+                    GROUP BY character) meaning
+                   ON meaning.character = character.id
+         LEFT JOIN (SELECT character, json_agg(reading) json
+                    FROM reading
+                    WHERE type = 'ja_on'
+                    GROUP BY character) onyomi
+                   ON onyomi.character = character.id
+         LEFT JOIN (SELECT character, json_agg(reading) json
+                    FROM reading
+                    WHERE type = 'ja_kun'
+                    GROUP BY character) kunyomi
+                   ON kunyomi.character = character.id
+         LEFT JOIN (SELECT * FROM miscellaneous) misc on character.id = misc.character;
+VACUUM ANALYZE mv_kanji;
+CREATE INDEX IF NOT EXISTS mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_example AS
+SELECT json_build_object(
+               'id', sentences.id,
+               'language', sentences.lang,
+               'sentence', sentences.sentence,
+               'translation', json_agg(
+                       json_build_object(
+                               'id', translation.id,
+                               'language', translation.lang,
+                               'sentence', translation.sentence
+                           )
+                   )
+           )::jsonb json,
+       sentences.id,
+       sentences.tsv
+FROM sentences
+         JOIN links
+              ON links.source = sentences.id
+         JOIN sentences translation
+              ON translation.id = links.translation
+                  AND translation.lang = 'eng'
+WHERE sentences.lang = 'jpn'
+GROUP BY sentences.id;
+VACUUM ANALYZE mv_example;
+CREATE INDEX IF NOT EXISTS mv_example_id_index ON mv_example (id);
+CREATE INDEX IF NOT EXISTS mv_example_tsv_index ON mv_example USING gin (tsv);
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_senses AS
 SELECT entr,
        json_agg(

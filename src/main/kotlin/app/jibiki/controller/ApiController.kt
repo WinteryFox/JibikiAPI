@@ -12,8 +12,47 @@ import reactor.core.publisher.Mono
 class ApiController(
         private val database: DatabaseAccessor
 ) {
+    @RequestMapping(method = [RequestMethod.GET], value = ["/all"], produces = ["application/json"])
+    fun getAll(
+            @RequestParam("query")
+            query: String,
+            @RequestParam("page", defaultValue = "0")
+            page: Int
+    ): Mono<String> {
+        if (query.isEmpty())
+            return Mono.just("[]")
+
+        return database.getAll(query, page)
+    }
+
+    @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
+    fun getWords(
+            @RequestParam("query")
+            query: String,
+            @RequestParam("page", defaultValue = "0")
+            page: Int
+    ): Mono<String> {
+        if (query.isEmpty())
+            return Mono.just("[]")
+
+        return database.getWords(query, page)
+    }
+
+    @RequestMapping(method = [RequestMethod.GET], value = ["/kanji"], produces = ["application/json"])
+    fun getKanji(
+            @RequestParam("query")
+            query: String,
+            @RequestParam("page", defaultValue = "0")
+            page: Int
+    ): Mono<String> {
+        if (query.isEmpty())
+            return Mono.just("[]")
+
+        return database.getKanji(query, page)
+    }
+
     @RequestMapping(method = [RequestMethod.GET], value = ["/sentences"], produces = ["application/json"])
-    fun sentenceSearch(
+    fun getSentences(
             @RequestParam("query")
             query: String,
             @RequestParam("page", defaultValue = "0")
@@ -31,32 +70,6 @@ class ApiController(
             return Mono.just("[]")
 
         return database.getSentences(query, page, minLength, maxLength, source, target)
-    }
-
-    @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
-    fun wordSearch(
-            @RequestParam("query")
-            query: String,
-            @RequestParam("page", defaultValue = "0")
-            page: Int
-    ): Mono<String> {
-        if (query.isEmpty())
-            return Mono.just("[]")
-
-        return database.getWords(query, page)
-    }
-
-    @RequestMapping(method = [RequestMethod.GET], value = ["/kanji"], produces = ["application/json"])
-    fun kanjiSearch(
-            @RequestParam("query")
-            query: String,
-            @RequestParam("page", defaultValue = "0")
-            page: Int
-    ): Mono<String> {
-        if (query.isEmpty())
-            return Mono.just("[]")
-
-        return database.getKanji(query, page)
     }
 
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
