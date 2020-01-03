@@ -113,7 +113,7 @@ WHERE entry.id = ANY (SELECT entries.entr
 
     fun getKanji(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(json_agg(json), '[]'::json) FROM mv_kanji
+SELECT coalesce(json_agg(json), '[]'::json) json FROM mv_kanji
 WHERE (json ->> 'id')::integer = ANY (SELECT character
                                           FROM meaning
                                           WHERE lower(meaning) = lower(:query)
