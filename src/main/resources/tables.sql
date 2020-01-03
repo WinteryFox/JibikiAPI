@@ -74,23 +74,25 @@ FROM sentences
                   AND translation.lang = 'eng'
 WHERE sentences.lang = 'jpn'
 GROUP BY sentences.id;
-VACUUM ANALYZE mv_example;
 CREATE INDEX IF NOT EXISTS mv_example_id_index ON mv_example (id);
 CREATE INDEX IF NOT EXISTS mv_example_tsv_index ON mv_example USING gin (tsv);
+VACUUM ANALYZE mv_example;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_senses AS
 SELECT entr,
        json_agg(
                json_build_object(
                        'definitions', gloss.txt,
-                       'part_of_speech', coalesce(pos, '[]'),
-                       'field_of_use', coalesce(fld, '[]')
+                       'part_of_speech', coalesce(pos, '[]'::jsonb),
+                       'field_of_use', coalesce(fld, '[]'::jsonb),
+                       'miscellaneous', coalesce(descr, '[]'::jsonb)
                    )
            )::jsonb json
-FROM (SELECT gloss.entr,
+FROM (SELECT gloss.entr                entr,
              json_agg(gloss.txt)       txt,
              min(pos.pos::text)::jsonb pos,
-             min(fld.fld::text)::jsonb fld
+             min(fld.fld::text)::jsonb fld,
+             misc.descr
       FROM gloss
                LEFT JOIN (SELECT pos.entr,
                                  pos.sens,
@@ -108,9 +110,14 @@ FROM (SELECT gloss.entr,
                                    JOIN kwfld ON fld.kw = kwfld.id
                           GROUP BY fld.entr, fld.sens) fld
                          ON fld.entr = gloss.entr AND fld.sens = gloss.sens
-      GROUP BY gloss.entr, gloss.sens) gloss
-GROUP BY gloss.entr;
-CREATE UNIQUE INDEX ON mv_senses (entr);
+               LEFT JOIN (SELECT misc.entr, misc.sens, misc.kw, json_agg(kwmisc.descr)::jsonb descr
+                          FROM misc
+                                   LEFT JOIN kwmisc ON misc.kw = kwmisc.id
+                          GROUP BY misc.entr, misc.sens, misc.kw) misc
+                         ON misc.entr = gloss.entr AND misc.sens = gloss.sens
+      GROUP BY gloss.entr, gloss.sens, misc.kw, misc.descr) gloss
+GROUP BY entr;
+CREATE INDEX IF NOT EXISTS mv_senses_entr_index ON mv_senses (entr);
 VACUUM ANALYZE mv_senses;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_forms AS
