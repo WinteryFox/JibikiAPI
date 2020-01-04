@@ -36,8 +36,8 @@ FROM (SELECT json_build_object(
                LEFT JOIN mv_example example
                          ON example.id = (SELECT e.id
                                           FROM mv_example e
-                                          WHERE e.tsv @@ plainto_tsquery(forms.json -> 0 -> 'kanji' ->> 'literal')
-                                             OR e.tsv @@ plainto_tsquery(forms.json -> 0 -> 'reading' ->> 'literal')
+                                          WHERE e.tsv @@ plainto_tsquery('japanese', forms.json -> 0 -> 'kanji' ->> 'literal')
+                                             OR e.tsv @@ plainto_tsquery('japanese', forms.json -> 0 -> 'reading' ->> 'literal')
                                           LIMIT 1)
                LEFT JOIN mv_kanji kanji
                          ON kanji.json ->> 'literal' = ANY
