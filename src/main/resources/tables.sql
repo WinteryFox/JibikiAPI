@@ -56,7 +56,7 @@ SELECT json_build_object(
                'id', sentences.id,
                'language', sentences.lang,
                'sentence', sentences.sentence,
-               'translation', json_agg(
+               'translations', json_agg(
                        json_build_object(
                                'id', translation.id,
                                'language', translation.lang,
