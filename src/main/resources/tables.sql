@@ -110,12 +110,12 @@ FROM (SELECT gloss.entr                entr,
                                    JOIN kwfld ON fld.kw = kwfld.id
                           GROUP BY fld.entr, fld.sens) fld
                          ON fld.entr = gloss.entr AND fld.sens = gloss.sens
-               LEFT JOIN (SELECT misc.entr, misc.sens, misc.kw, json_agg(kwmisc.descr)::jsonb descr
+               LEFT JOIN (SELECT misc.entr, misc.sens, json_agg(kwmisc.descr)::jsonb descr
                           FROM misc
                                    LEFT JOIN kwmisc ON misc.kw = kwmisc.id
-                          GROUP BY misc.entr, misc.sens, misc.kw) misc
+                          GROUP BY misc.entr, misc.sens) misc
                          ON misc.entr = gloss.entr AND misc.sens = gloss.sens
-      GROUP BY gloss.entr, gloss.sens, misc.kw, misc.descr) gloss
+      GROUP BY gloss.entr, gloss.sens, misc.descr) gloss
 GROUP BY entr;
 CREATE INDEX IF NOT EXISTS mv_senses_entr_index ON mv_senses (entr);
 VACUUM ANALYZE mv_senses;
