@@ -143,15 +143,23 @@ VACUUM ANALYZE mv_forms;
 
 CREATE TABLE IF NOT EXISTS users
 (
-    snowflake TEXT                        NOT NULL PRIMARY KEY,
-    email     TEXT                        NOT NULL,
-    hash      TEXT                        NOT NULL,
-    username  TEXT                        NOT NULL
+    snowflake TEXT NOT NULL PRIMARY KEY,
+    email     TEXT NOT NULL,
+    hash      TEXT NOT NULL,
+    username  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS userTokens
 (
     snowflake TEXT NOT NULL REFERENCES users (snowflake),
-    token TEXT NOT NULL,
+    token     TEXT NOT NULL,
     PRIMARY KEY (snowflake, token)
+);
+
+CREATE TABLE IF NOT EXISTS bookmarks
+(
+    snowflake TEXT     NOT NULL REFERENCES users (snowflake),
+    type      SMALLINT NOT NULL,
+    bookmark  INTEGER  NOT NULL,
+    PRIMARY KEY (snowflake, type, bookmark)
 );

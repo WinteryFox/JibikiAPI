@@ -190,7 +190,7 @@ FROM (SELECT json_build_object(
         return client.execute("""
 INSERT INTO users (snowflake, email, hash, username)
 SELECT :snowflake, :email, crypt(:password, gen_salt('md5')), :username
-WHERE NOT EXISTS(
+WHERE NOT exists(
         SELECT * FROM users WHERE email = :email
     )
 RETURNING json_build_object(
@@ -211,7 +211,7 @@ RETURNING json_build_object(
 INSERT INTO userTokens (snowflake, token)
 SELECT users.snowflake, gen_random_uuid() token
 FROM users
-WHERE EXISTS(
+WHERE exists(
               SELECT snowflake FROM users WHERE email = :email AND hash = crypt(:password, hash)
           )
 RETURNING token
@@ -243,7 +243,7 @@ SELECT json_build_object(
                'username', username
            ) json
 FROM users
-WHERE EXISTS(
+WHERE exists(
               SELECT snowflake FROM userTokens WHERE token = :token
           )
         """)
@@ -251,5 +251,64 @@ WHERE EXISTS(
                 .fetch()
                 .first()
                 .map { (it["json"] as Json).asString() }
+    }
+
+    fun getBookmarks(token: String): Mono<String> {
+        return client.execute("""
+SELECT json_build_object(
+               'snowflake', users.snowflake,
+               'words', coalesce(json_agg(bookmark) FILTER (WHERE type = 0), '[]'::json),
+               'kanji', coalesce(json_agg(bookmark) FILTER (WHERE type = 1), '[]'::json),
+               'sentences', coalesce(json_agg(bookmark) FILTER (WHERE type = 2), '[]'::json)
+           ) json
+FROM users
+         LEFT JOIN bookmarks b on users.snowflake = b.snowflake
+WHERE exists(
+              SELECT snowflake FROM userTokens WHERE token = :token
+          )
+GROUP BY users.snowflake
+        """)
+                .bind("token", token)
+                .fetch()
+                .first()
+                .map { (it["json"] as Json).asString() }
+    }
+
+    fun createBookmark(token: String, type: Int, bookmark: Int): Mono<Int> {
+        return client.execute("""
+INSERT INTO bookmarks (snowflake, type, bookmark)
+SELECT users.snowflake, :type, :bookmark
+FROM users
+WHERE exists(
+        SELECT snowflake FROM userTokens WHERE token = :token
+    )
+  AND NOT exists(
+        SELECT *
+        FROM bookmarks
+        WHERE bookmarks.snowflake = users.snowflake
+          AND bookmarks.type = :type
+          AND bookmarks.bookmark = :bookmark
+    )
+        """)
+                .bind("token", token)
+                .bind("type", type)
+                .bind("bookmark", bookmark)
+                .fetch()
+                .rowsUpdated()
+    }
+
+    fun deleteBookmark(token: String, type: Int, bookmark: Int): Mono<Int> {
+        return client.execute("""
+DELETE
+FROM bookmarks
+WHERE snowflake = (SELECT snowflake FROM userTokens WHERE token = :token)
+  AND type = :type
+  AND bookmark = :bookmark
+        """)
+                .bind("token", token)
+                .bind("type", type)
+                .bind("bookmark", bookmark)
+                .fetch()
+                .rowsUpdated()
     }
 }

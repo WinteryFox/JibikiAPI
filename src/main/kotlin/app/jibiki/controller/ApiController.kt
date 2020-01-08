@@ -121,4 +121,47 @@ class ApiController(
                 .map { ResponseEntity.status(HttpStatus.OK).body(it) }
                 .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
     }
+
+    @RequestMapping(method = [RequestMethod.GET], value = ["/users/bookmarks"], produces = ["applications/json"])
+    fun getBookmarks(
+            @CookieValue("token")
+            token: String
+    ): Mono<ResponseEntity<String>> {
+        return database
+                .getBookmarks(token)
+                .map { ResponseEntity.status(HttpStatus.OK).body(it) }
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+    }
+
+    @RequestMapping(method = [RequestMethod.PUT], value = ["/users/bookmarks"])
+    fun createBookmark(
+            @CookieValue("token")
+            token: String,
+            @RequestParam("type")
+            type: Int,
+            @RequestParam("bookmark")
+            bookmark: Int
+    ): Mono<ResponseEntity<Void>> {
+        return database
+                .createBookmark(token, type, bookmark)
+                .filter { it > 0 }
+                .map { ResponseEntity.status(HttpStatus.NO_CONTENT).build<Void>() }
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+    }
+
+    @RequestMapping(method = [RequestMethod.DELETE], value = ["/users/bookmarks"])
+    fun deleteBookmark(
+            @CookieValue("token")
+            token: String,
+            @RequestParam("type")
+            type: Int,
+            @RequestParam("bookmark")
+            bookmark: Int
+    ): Mono<ResponseEntity<Void>> {
+        return database
+                .deleteBookmark(token, type, bookmark)
+                .filter { it > 0 }
+                .map { ResponseEntity.status(HttpStatus.NO_CONTENT).build<Void>() }
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+    }
 }
