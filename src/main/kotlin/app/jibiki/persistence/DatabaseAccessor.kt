@@ -1,6 +1,5 @@
 package app.jibiki.persistence
 
-import app.jibiki.model.Snowflake
 import com.moji4j.MojiConverter
 import io.r2dbc.postgresql.codec.Json
 import org.springframework.beans.factory.annotation.Autowired
