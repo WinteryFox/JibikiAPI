@@ -9,9 +9,9 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>app.jibiki</groupId>
-    <artifactId>jibiki</artifactId>
+    <artifactId>JibikiAPI</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>jibiki</name>
+    <name>JibikiAPI</name>
     <description>Japanese-English dictionary app</description>
 
     <properties>
