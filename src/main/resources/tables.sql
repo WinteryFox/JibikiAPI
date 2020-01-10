@@ -2,24 +2,30 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-CREATE INDEX IF NOT EXISTS trgm_gloss_index ON gloss USING GIN (txt gin_trgm_ops);
+DROP INDEX trgm_gloss_index;
+CREATE INDEX trgm_gloss_index ON gloss USING GIN (txt gin_trgm_ops);
 
-CREATE INDEX IF NOT EXISTS trgm_kanji_index ON kanj USING GIN (txt gin_trgm_ops);
+DROP INDEX trgm_kanji_index;
+CREATE INDEX trgm_kanji_index ON kanj USING GIN (txt gin_trgm_ops);
 
-CREATE INDEX IF NOT EXISTS trgm_reading_index ON rdng USING GIN (txt gin_trgm_ops);
+DROP INDEX trgm_reading_index;
+CREATE INDEX trgm_reading_index ON rdng USING GIN (txt gin_trgm_ops);
 
-CREATE INDEX IF NOT EXISTS trgm_gloss_index ON gloss (regexp_replace(txt, '\s\(.*\)', ''));
+DROP INDEX trgm_gloss_index;
+CREATE INDEX trgm_gloss_index ON gloss (regexp_replace(txt, '\s\(.*\)', ''));
 
-CREATE INDEX IF NOT EXISTS gloss_index ON gloss (entr, sens, txt);
+DROP INDEX gloss_index;
+CREATE INDEX gloss_index ON gloss (entr, sens, txt);
 
+DROP MATERIALIZED VIEW mv_kanji;
 CREATE MATERIALIZED VIEW mv_kanji AS
 SELECT json_build_object(
                'id', character.id,
                'literal', character.literal,
                'definitions', meaning.json,
                'readings', json_build_object(
-                       'onyomi', onyomi.json,
-                       'kunyomi', kunyomi.json
+                       'onyomi', coalesce(readings.onyomi, '[]'::json),
+                       'kunyomi', coalesce(readings.kunyomi, '[]'::json)
                    ),
                'miscellaneous', json_build_object(
                        'grade', misc.grade,
@@ -32,26 +38,24 @@ SELECT json_build_object(
                    )
            )::jsonb json
 FROM character
-         LEFT JOIN (SELECT character, json_agg(meaning) json
+         LEFT JOIN (SELECT character,
+                           json_agg(meaning) json
                     FROM meaning
                     WHERE language = 'en'
                     GROUP BY character) meaning
                    ON meaning.character = character.id
-         LEFT JOIN (SELECT character, json_agg(reading) json
+         LEFT JOIN miscellaneous misc on character.id = misc.character
+         LEFT JOIN (SELECT character,
+                           json_agg(reading) FILTER (WHERE type = 'ja_on') onyomi,
+                           json_agg(reading) FILTER (WHERE type = 'ja_kun') kunyomi
                     FROM reading
-                    WHERE type = 'ja_on'
-                    GROUP BY character) onyomi
-                   ON onyomi.character = character.id
-         LEFT JOIN (SELECT character, json_agg(reading) json
-                    FROM reading
-                    WHERE type = 'ja_kun'
-                    GROUP BY character) kunyomi
-                   ON kunyomi.character = character.id
-         LEFT JOIN (SELECT * FROM miscellaneous) misc on character.id = misc.character;
+                    GROUP BY character) readings
+                   ON readings.character = character.id;
 VACUUM ANALYZE mv_kanji;
-CREATE INDEX IF NOT EXISTS mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
+CREATE INDEX mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_example AS
+DROP MATERIALIZED VIEW mv_example;
+CREATE MATERIALIZED VIEW mv_example AS
 SELECT json_build_object(
                'id', sentences.id,
                'language', sentences.lang,
@@ -74,11 +78,12 @@ FROM sentences
                   AND translation.lang = 'eng'
 WHERE sentences.lang = 'jpn'
 GROUP BY sentences.id;
-CREATE INDEX IF NOT EXISTS mv_example_id_index ON mv_example (id);
-CREATE INDEX IF NOT EXISTS mv_example_tsv_index ON mv_example USING gin (tsv);
+CREATE INDEX mv_example_id_index ON mv_example (id);
+CREATE INDEX mv_example_tsv_index ON mv_example USING gin (tsv);
 VACUUM ANALYZE mv_example;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_senses AS
+DROP MATERIALIZED VIEW mv_senses;
+CREATE MATERIALIZED VIEW mv_senses AS
 SELECT entr,
        json_agg(
                json_build_object(
@@ -117,10 +122,11 @@ FROM (SELECT gloss.entr                entr,
                          ON misc.entr = gloss.entr AND misc.sens = gloss.sens
       GROUP BY gloss.entr, gloss.sens, misc.descr) gloss
 GROUP BY entr;
-CREATE INDEX IF NOT EXISTS mv_senses_entr_index ON mv_senses (entr);
+CREATE INDEX mv_senses_entr_index ON mv_senses (entr);
 VACUUM ANALYZE mv_senses;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_forms AS
+DROP MATERIALIZED VIEW mv_forms;
+CREATE MATERIALIZED VIEW mv_forms AS
 SELECT reading.entr,
        json_agg(json_build_object(
                'kanji', json_build_object('literal', kanji.txt, 'info', kinf.descr),
