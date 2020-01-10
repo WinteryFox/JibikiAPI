@@ -1,4 +1,4 @@
-package app.jibiki.model
+package app.jibiki.persistence
 
 class Snowflake(
         val snowflake: Long? = null
