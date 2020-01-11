@@ -208,16 +208,11 @@ RETURNING json_build_object(
     fun createToken(email: String, password: String): Mono<String> {
         return client.execute("""
 INSERT INTO userTokens (snowflake, token)
-SELECT users.snowflake, gen_random_uuid() token
+SELECT users.snowflake, gen_random_uuid()
 FROM users
-WHERE exists(
-              SELECT u.snowflake
-              FROM users u
-              WHERE u.snowflake = users.snowflake
-                AND u.email = :email
-                AND u.hash = crypt(:password, u.hash)
-          )
-RETURNING token
+WHERE email = :email
+  AND hash = crypt(: password, hash)
+RETURNING snowflake, token
         """)
                 .bind("email", email)
                 .bind("password", password)
