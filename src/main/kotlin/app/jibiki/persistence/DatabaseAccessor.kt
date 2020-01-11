@@ -211,7 +211,11 @@ INSERT INTO userTokens (snowflake, token)
 SELECT users.snowflake, gen_random_uuid() token
 FROM users
 WHERE exists(
-              SELECT snowflake FROM users WHERE email = :email AND hash = crypt(:password, hash)
+              SELECT u.snowflake
+              FROM users u
+              WHERE u.snowflake = users.snowflake
+                AND u.email = :email
+                AND u.hash = crypt(:password, u.hash)
           )
 RETURNING token
         """)
