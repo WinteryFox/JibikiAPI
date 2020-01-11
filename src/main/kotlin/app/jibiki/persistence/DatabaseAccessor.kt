@@ -211,8 +211,8 @@ INSERT INTO userTokens (snowflake, token)
 SELECT users.snowflake, gen_random_uuid()
 FROM users
 WHERE email = :email
-  AND hash = crypt(: password, hash)
-RETURNING snowflake, token
+  AND hash = crypt(:password, hash)
+RETURNING token
         """)
                 .bind("email", email)
                 .bind("password", password)
