@@ -241,9 +241,7 @@ SELECT json_build_object(
                'username', username
            ) json
 FROM users
-WHERE exists(
-              SELECT snowflake FROM userTokens WHERE token = :token
-          )
+WHERE snowflake = (SELECT snowflake FROM userTokens WHERE token = :token)
         """)
                 .bind("token", token)
                 .fetch()
@@ -261,9 +259,7 @@ SELECT json_build_object(
            ) json
 FROM users
          LEFT JOIN bookmarks b on users.snowflake = b.snowflake
-WHERE exists(
-              SELECT snowflake FROM userTokens WHERE token = :token
-          )
+WHERE users.snowflake = (SELECT snowflake FROM userTokens WHERE token = :token)
 GROUP BY users.snowflake
         """)
                 .bind("token", token)
@@ -275,18 +271,10 @@ GROUP BY users.snowflake
     fun createBookmark(token: String, type: Int, bookmark: Int): Mono<Int> {
         return client.execute("""
 INSERT INTO bookmarks (snowflake, type, bookmark)
-SELECT users.snowflake, :type, :bookmark
+SELECT snowflake, :type, :bookmark
 FROM users
-WHERE exists(
-        SELECT snowflake FROM userTokens WHERE token = :token
-    )
-  AND NOT exists(
-        SELECT *
-        FROM bookmarks
-        WHERE bookmarks.snowflake = users.snowflake
-          AND bookmarks.type = :type
-          AND bookmarks.bookmark = :bookmark
-    )
+WHERE snowflake = (SELECT snowflake FROM userTokens WHERE token = :token)
+ON CONFLICT DO NOTHING
         """)
                 .bind("token", token)
                 .bind("type", type)
