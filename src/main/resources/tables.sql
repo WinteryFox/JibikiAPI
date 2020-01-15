@@ -12,10 +12,16 @@ DROP INDEX trgm_reading_index;
 CREATE INDEX trgm_reading_index ON rdng USING GIN (txt gin_trgm_ops);
 
 DROP INDEX trgm_gloss_index;
-CREATE INDEX trgm_gloss_index ON gloss (regexp_replace(txt, '\s\(.*\)', ''));
+CREATE INDEX trgm_gloss_index ON gloss (regexp_replace(lower(txt), '\s\(.*\)', ''));
 
 DROP INDEX gloss_index;
 CREATE INDEX gloss_index ON gloss (entr, sens, txt);
+
+DROP INDEX sentences_id_cast_index;
+CREATE INDEX sentences_id_cast_index ON sentences (CAST(id AS TEXT));
+
+DROP INDEX reading_reading_stripped_index;
+CREATE INDEX reading_reading_stripped_index ON reading (REPLACE(reading, '.', ''));
 
 DROP MATERIALIZED VIEW mv_kanji;
 CREATE MATERIALIZED VIEW mv_kanji AS
