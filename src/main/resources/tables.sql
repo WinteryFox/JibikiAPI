@@ -2,28 +2,28 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-DROP INDEX trgm_gloss_index;
+DROP INDEX IF EXISTS trgm_gloss_index;
 CREATE INDEX trgm_gloss_index ON gloss USING GIN (txt gin_trgm_ops);
 
-DROP INDEX trgm_kanji_index;
+DROP INDEX IF EXISTS trgm_kanji_index;
 CREATE INDEX trgm_kanji_index ON kanj USING GIN (txt gin_trgm_ops);
 
-DROP INDEX trgm_reading_index;
+DROP INDEX IF EXISTS trgm_reading_index;
 CREATE INDEX trgm_reading_index ON rdng USING GIN (txt gin_trgm_ops);
 
-DROP INDEX trgm_gloss_index;
+DROP INDEX IF EXISTS trgm_gloss_index;
 CREATE INDEX trgm_gloss_index ON gloss (regexp_replace(lower(txt), '\s\(.*\)', ''));
 
-DROP INDEX gloss_index;
+DROP INDEX IF EXISTS gloss_index;
 CREATE INDEX gloss_index ON gloss (entr, sens, txt);
 
-DROP INDEX sentences_id_cast_index;
+DROP INDEX IF EXISTS sentences_id_cast_index;
 CREATE INDEX sentences_id_cast_index ON sentences (CAST(id AS TEXT));
 
-DROP INDEX reading_reading_stripped_index;
+DROP INDEX IF EXISTS reading_reading_stripped_index;
 CREATE INDEX reading_reading_stripped_index ON reading (REPLACE(reading, '.', ''));
 
-DROP MATERIALIZED VIEW mv_kanji;
+DROP MATERIALIZED VIEW IF EXISTS mv_kanji;
 CREATE MATERIALIZED VIEW mv_kanji AS
 SELECT json_build_object(
                'id', character.id,
@@ -60,7 +60,7 @@ FROM character
 VACUUM ANALYZE mv_kanji;
 CREATE INDEX mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
 
-DROP MATERIALIZED VIEW mv_example;
+DROP MATERIALIZED VIEW IF EXISTS mv_example;
 CREATE MATERIALIZED VIEW mv_example AS
 SELECT json_build_object(
                'id', sentences.id,
@@ -88,7 +88,7 @@ CREATE INDEX mv_example_id_index ON mv_example (id);
 CREATE INDEX mv_example_tsv_index ON mv_example USING gin (tsv);
 VACUUM ANALYZE mv_example;
 
-DROP MATERIALIZED VIEW mv_senses;
+DROP MATERIALIZED VIEW IF EXISTS mv_senses;
 CREATE MATERIALIZED VIEW mv_senses AS
 SELECT entr,
        json_agg(
@@ -131,7 +131,7 @@ GROUP BY entr;
 CREATE INDEX mv_senses_entr_index ON mv_senses (entr);
 VACUUM ANALYZE mv_senses;
 
-DROP MATERIALIZED VIEW mv_forms;
+DROP MATERIALIZED VIEW IF EXISTS mv_forms;
 CREATE MATERIALIZED VIEW mv_forms AS
 SELECT reading.entr,
        json_agg(json_build_object(
