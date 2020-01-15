@@ -86,7 +86,7 @@ FROM entr entry
 WHERE entry.id = ANY (SELECT entries.entr
                       FROM (SELECT entr, txt
                             FROM gloss
-                            WHERE regexp_replace(txt, '\s\(.*\)', '') = :query
+                            WHERE regexp_replace(lower(txt), '\s\(.*\)', '') = lower(:query)
                             UNION
                             SELECT entr, txt
                             FROM kanj
@@ -94,8 +94,9 @@ WHERE entry.id = ANY (SELECT entries.entr
                             UNION
                             SELECT entr, txt
                             FROM rdng
-                            WHERE txt = hiragana(:japanese)
-                               OR txt = katakana(:japanese)
+                            WHERE txt IN (hiragana(:japanese),
+                                          katakana(:japanese))
+                               OR entr::text = :query
                             LIMIT :pageSize
                             OFFSET
                             :page * :pageSize) entries
@@ -114,19 +115,23 @@ WHERE entry.id = ANY (SELECT entries.entr
 
     fun getKanji(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(json_agg(json), '[]'::json) json FROM mv_kanji
+SELECT coalesce(json_agg(json), '[]'::json) json
+FROM mv_kanji
 WHERE (json ->> 'id')::integer = ANY (SELECT character
-                                          FROM meaning
-                                          WHERE lower(meaning) = lower(:query)
-                                          UNION
-                                          SELECT character
-                                          FROM reading
-                                          WHERE reading = hiragana(:japanese)
-                                             OR reading = katakana(:japanese)
-                                          UNION
-                                          SELECT id
-                                          FROM character
-                                          WHERE literal = :query)
+                                      FROM meaning
+                                      WHERE lower(meaning) = lower(:query)
+                                      UNION
+                                      SELECT character
+                                      FROM reading
+                                      WHERE reading IN (hiragana(:japanese),
+                                                        katakana(:japanese))
+                                         OR REPLACE(reading, '.', '') IN (hiragana(:japanese),
+                                                                          katakana(:japanese))
+                                      UNION
+                                      SELECT id
+                                      FROM character
+                                      WHERE literal = :query
+                                         OR id::text = :query)
 LIMIT :pageSize
 OFFSET
 :page * :pageSize
@@ -162,19 +167,24 @@ FROM (SELECT json_build_object(
                JOIN sentences translations
                     ON (translations.id = links.translation OR translations.id = links.source)
                         AND translations.lang = :target
-      WHERE source = ANY (SELECT entries.id entries
-                          FROM sentences entries
-                          WHERE entries.tsv @@ plainto_tsquery('japanese', :query)
-                            AND (entries.lang = 'eng' OR entries.lang = 'jpn')
-                            AND length(entries.sentence) > :minLength
-                            AND length(entries.sentence) < :maxLength
+      WHERE source = ANY (SELECT *
+                          FROM (SELECT entries.id entries
+                                FROM sentences entries
+                                WHERE entries.tsv @@ plainto_tsquery('japanese', :query)
+                                  AND (entries.lang IN ('eng', 'jpn'))
+                                  AND length(entries.sentence) > :minLength
+                                  AND length(entries.sentence) < :maxLength
+                                UNION
+                                SELECT entries.id entries
+                                FROM sentences entries
+                                WHERE entries.id::text = :query) entries
                           LIMIT :pageSize
                           OFFSET
                           :page * :pageSize)
       GROUP BY source.id) json
         """)
                 .bind("pageSize", pageSize)
-                .bind("page", page * pageSize)
+                .bind("page", page)
                 .bind("query", query)
                 .bind("minLength", minLength)
                 .bind("maxLength", maxLength)
