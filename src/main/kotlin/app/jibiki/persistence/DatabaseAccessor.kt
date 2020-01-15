@@ -44,7 +44,7 @@ FROM (SELECT json_build_object(
       WHERE entry.id = ANY (SELECT entries.entr
                             FROM (SELECT entr, txt
                                   FROM gloss
-                                  WHERE regexp_replace(txt, '\s\(.*\)', '') = :query
+                                  WHERE regexp_replace(lower(txt), '\s\(.*\)', '') = lower(:query)
                                   UNION
                                   SELECT entr, txt
                                   FROM kanj
@@ -52,8 +52,9 @@ FROM (SELECT json_build_object(
                                   UNION
                                   SELECT entr, txt
                                   FROM rdng
-                                  WHERE txt = hiragana(:japanese)
-                                     OR txt = katakana(:japanese)
+                                  WHERE txt IN (hiragana(:japanese),
+                                                katakana(:japanese))
+                                     OR entr::text = :query
                                   LIMIT :pageSize
                                   OFFSET
                                   :page * :pageSize) entries
