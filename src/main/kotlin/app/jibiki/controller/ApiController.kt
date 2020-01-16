@@ -122,17 +122,6 @@ class ApiController(
                 .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
     }
 
-    @RequestMapping(method = [RequestMethod.GET], value = ["/users/bookmarks"], produces = ["applications/json"])
-    fun getBookmarks(
-            @CookieValue("token")
-            token: String
-    ): Mono<ResponseEntity<String>> {
-        return database
-                .getBookmarks(token)
-                .map { ResponseEntity.status(HttpStatus.OK).body(it) }
-                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
-    }
-
     @RequestMapping(method = [RequestMethod.PUT], value = ["/users/bookmarks"])
     fun createBookmark(
             @CookieValue("token")

@@ -213,26 +213,14 @@ WHERE token = :token
     fun getSelf(token: String): Mono<String> {
         return client.execute("""
 SELECT json_build_object(
-               'snowflake', snowflake,
-               'email', email,
-               'username', username
-           ) json
-FROM users
-WHERE snowflake = (SELECT snowflake FROM userTokens WHERE token = :token)
-        """)
-                .bind("token", token)
-                .fetch()
-                .first()
-                .map { (it["json"] as Json).asString() }
-    }
-
-    fun getBookmarks(token: String): Mono<String> {
-        return client.execute("""
-SELECT json_build_object(
                'snowflake', users.snowflake,
-               'words', coalesce(json_agg(bookmark) FILTER (WHERE type = 0), '[]'::json),
-               'kanji', coalesce(json_agg(bookmark) FILTER (WHERE type = 1), '[]'::json),
-               'sentences', coalesce(json_agg(bookmark) FILTER (WHERE type = 2), '[]'::json)
+               'email', users.email,
+               'username', users.username,
+               'bookmarks', json_build_object(
+                       'words', coalesce(json_agg(b.bookmark) FILTER (WHERE b.type = 0), '[]'::json),
+                       'kanji', coalesce(json_agg(b.bookmark) FILTER (WHERE b.type = 1), '[]'::json),
+                       'sentences', coalesce(json_agg(b.bookmark) FILTER (WHERE b.type = 2), '[]'::json)
+                   )
            ) json
 FROM users
          LEFT JOIN bookmarks b on users.snowflake = b.snowflake
