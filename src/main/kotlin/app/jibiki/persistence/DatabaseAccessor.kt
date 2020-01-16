@@ -28,6 +28,7 @@ FROM (SELECT json_build_object(
                      'kanji', coalesce(array_to_json(array_remove(array_agg(kanji.json), null)), '[]'::json)
                  ) json
       FROM entr entry
+               JOIN get_words(:query, :japanese, :page, :pageSize) ON id = get_words
                JOIN mv_forms forms
                     ON forms.entr = entry.id
                JOIN mv_senses senses
@@ -35,32 +36,15 @@ FROM (SELECT json_build_object(
                LEFT JOIN mv_example example
                          ON example.id = (SELECT e.id
                                           FROM mv_example e
-                                          WHERE e.tsv @@ plainto_tsquery('japanese', forms.json -> 0 -> 'kanji' ->> 'literal')
-                                             OR e.tsv @@ plainto_tsquery('japanese', forms.json -> 0 -> 'reading' ->> 'literal')
+                                          WHERE e.tsv @@
+                                                plainto_tsquery('japanese', forms.json -> 0 -> 'kanji' ->> 'literal')
+                                             OR e.tsv @@
+                                                plainto_tsquery('japanese', forms.json -> 0 -> 'reading' ->> 'literal')
                                           LIMIT 1)
                LEFT JOIN mv_kanji kanji
                          ON kanji.json ->> 'literal' = ANY
                             (regexp_split_to_array(forms.json -> 0 -> 'kanji' ->> 'literal', '\.*'))
-      WHERE entry.id = ANY (SELECT entries.entr
-                            FROM (SELECT entr, txt
-                                  FROM gloss
-                                  WHERE regexp_replace(lower(txt), '\s\(.*\)', '') = lower(:query)
-                                  UNION
-                                  SELECT entr, txt
-                                  FROM kanj
-                                  WHERE txt % :query
-                                  UNION
-                                  SELECT entr, txt
-                                  FROM rdng
-                                  WHERE txt IN (hiragana(:japanese),
-                                                katakana(:japanese))
-                                     OR entr::text = :query
-                                  LIMIT :pageSize
-                                  OFFSET
-                                  :page * :pageSize) entries
-                            ORDER BY word_similarity(txt, :query) DESC,
-                                     word_similarity(txt, :japanese) DESC)
-        AND src != 3
+      WHERE src != 3
       GROUP BY entry.id, forms.json, senses.json, example.json) json
         """)
                 .bind("pageSize", pageSize)
@@ -80,29 +64,11 @@ SELECT coalesce(json_agg(json_build_object(
         'senses', senses.json
     )), '[]'::json) json
 FROM entr entry
+         JOIN get_words(:query, :japanese, :page, :pageSize) ON id = get_words
          JOIN mv_forms forms
               ON forms.entr = entry.id
          JOIN mv_senses senses
               ON senses.entr = entry.id
-WHERE entry.id = ANY (SELECT entries.entr
-                      FROM (SELECT entr, txt
-                            FROM gloss
-                            WHERE regexp_replace(lower(txt), '\s\(.*\)', '') = lower(:query)
-                            UNION
-                            SELECT entr, txt
-                            FROM kanj
-                            WHERE txt % :query
-                            UNION
-                            SELECT entr, txt
-                            FROM rdng
-                            WHERE txt IN (hiragana(:japanese),
-                                          katakana(:japanese))
-                               OR entr::text = :query
-                            LIMIT :pageSize
-                            OFFSET
-                            :page * :pageSize) entries
-                      ORDER BY word_similarity(txt, :query) DESC,
-                               word_similarity(txt, :japanese) DESC)
   AND src != 3
         """)
                 .bind("pageSize", pageSize)
@@ -131,8 +97,8 @@ WHERE (json ->> 'id')::integer = ANY (SELECT character
                                       UNION
                                       SELECT id
                                       FROM character
-                                      WHERE literal = :query
-                                         OR id::text = :query)
+                                      WHERE literal = ANY(regexp_split_to_array(:query, ''))
+                                         OR id::text = ANY (regexp_split_to_array(:query, ',')))
 LIMIT :pageSize
 OFFSET
 :page * :pageSize
@@ -178,7 +144,7 @@ FROM (SELECT json_build_object(
                                 UNION
                                 SELECT entries.id entries
                                 FROM sentences entries
-                                WHERE entries.id::text = :query) entries
+                                WHERE entries.id::text = ANY(regexp_split_to_array(:query, ','))) entries
                           LIMIT :pageSize
                           OFFSET
                           :page * :pageSize)

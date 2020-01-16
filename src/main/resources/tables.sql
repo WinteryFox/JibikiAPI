@@ -153,6 +153,35 @@ GROUP BY reading.entr;
 CREATE UNIQUE INDEX ON mv_forms (entr);
 VACUUM ANALYZE mv_forms;
 
+CREATE OR REPLACE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
+    RETURNS TABLE
+            (
+                entry INTEGER
+            )
+AS
+$$
+BEGIN
+    RETURN QUERY SELECT entr
+                 FROM (SELECT entr
+                       FROM gloss
+                       WHERE regexp_replace(lower(txt), '\s\(.*\)', '') = lower(query)
+                       UNION
+                       SELECT entr
+                       FROM kanj
+                       WHERE txt % query
+                       UNION
+                       SELECT entr
+                       FROM rdng
+                       WHERE txt IN (hiragana(japanese),
+                                     katakana(japanese))
+                          OR entr::text = ANY (regexp_split_to_array(query, ','))
+                       LIMIT pageSize
+                       OFFSET
+                       page * pageSize) entries
+                 GROUP BY entr;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE IF NOT EXISTS users
 (
     snowflake TEXT NOT NULL PRIMARY KEY,
