@@ -185,7 +185,7 @@ RETURNING json_build_object(
     fun createToken(email: String, password: String): Mono<String> {
         return client.execute("""
 INSERT INTO userTokens (snowflake, token)
-SELECT users.snowflake, gen_random_uuid()
+SELECT users.snowflake, encode(gen_random_uuid()::text::bytea, 'base64')
 FROM users
 WHERE email = :email
   AND hash = crypt(:password, hash)
