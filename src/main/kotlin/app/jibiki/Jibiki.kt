@@ -7,7 +7,6 @@ import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories
 
 @SpringBootApplication
 @EnableR2dbcRepositories
-@ImportResource("classpath*:redis.xml")
 class Jibiki
 
 fun main(args: Array<String>) {
