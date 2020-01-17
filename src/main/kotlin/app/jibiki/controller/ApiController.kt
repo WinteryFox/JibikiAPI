@@ -87,17 +87,17 @@ class ApiController(
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/login"], consumes = ["application/x-www-form-urlencoded"])
     fun loginUser(
             exchange: ServerWebExchange
-    ): Mono<ResponseEntity<String>> {
+    ): Mono<ResponseEntity<Void>> {
         return exchange.formData.flatMap {
             database
                     .createToken(it["email"]!![0], it["password"]!![0])
                     .map { token ->
                         ResponseEntity
-                                .status(HttpStatus.CREATED)
+                                .status(HttpStatus.OK)
                                 .header("Set-Cookie", "token=$token; SameSite=Strict; HttpOnly; Secure")
-                                .build<String>()
+                                .build<Void>()
                     }
-                    .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+                    .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
         }
     }
 
@@ -108,7 +108,7 @@ class ApiController(
     ): Mono<ResponseEntity<Void>> {
         return database
                 .deleteToken(token)
-                .thenReturn(ResponseEntity.noContent().header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
+                .thenReturn(ResponseEntity.status(HttpStatus.OK).header("Set-Cookie", "token=null; Expires=0; Max-Age=0").build())
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
@@ -119,18 +119,7 @@ class ApiController(
         return database
                 .getSelf(token)
                 .map { ResponseEntity.status(HttpStatus.OK).body(it) }
-                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
-    }
-
-    @RequestMapping(method = [RequestMethod.GET], value = ["/users/bookmarks"], produces = ["applications/json"])
-    fun getBookmarks(
-            @CookieValue("token")
-            token: String
-    ): Mono<ResponseEntity<String>> {
-        return database
-                .getBookmarks(token)
-                .map { ResponseEntity.status(HttpStatus.OK).body(it) }
-                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
     }
 
     @RequestMapping(method = [RequestMethod.PUT], value = ["/users/bookmarks"])
@@ -145,8 +134,8 @@ class ApiController(
         return database
                 .createBookmark(token, type, bookmark)
                 .filter { it > 0 }
-                .map { ResponseEntity.status(HttpStatus.NO_CONTENT).build<Void>() }
-                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+                .map { ResponseEntity.status(HttpStatus.CREATED).build<Void>() }
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
     }
 
     @RequestMapping(method = [RequestMethod.DELETE], value = ["/users/bookmarks"])
@@ -161,7 +150,7 @@ class ApiController(
         return database
                 .deleteBookmark(token, type, bookmark)
                 .filter { it > 0 }
-                .map { ResponseEntity.status(HttpStatus.NO_CONTENT).build<Void>() }
-                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build()))
+                .map { ResponseEntity.status(HttpStatus.OK).build<Void>() }
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
     }
 }

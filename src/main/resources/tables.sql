@@ -52,7 +52,7 @@ FROM character
                    ON meaning.character = character.id
          LEFT JOIN miscellaneous misc on character.id = misc.character
          LEFT JOIN (SELECT character,
-                           json_agg(reading) FILTER (WHERE type = 'ja_on') onyomi,
+                           json_agg(reading) FILTER (WHERE type = 'ja_on')  onyomi,
                            json_agg(reading) FILTER (WHERE type = 'ja_kun') kunyomi
                     FROM reading
                     GROUP BY character) readings
@@ -152,6 +152,77 @@ FROM rdng reading
 GROUP BY reading.entr;
 CREATE UNIQUE INDEX ON mv_forms (entr);
 VACUUM ANALYZE mv_forms;
+
+ALTER TABLE entr
+    ADD COLUMN IF NOT EXISTS score SMALLINT NOT NULL DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION score_word() RETURNS TRIGGER AS
+$$
+DECLARE
+    definitionCount INTEGER := (SELECT count(*)
+                                FROM gloss
+                                WHERE entr = new.id);
+    posCount        INTEGER := (SELECT count(*)
+                                FROM pos
+                                WHERE entr = new.id);
+    fldCount        INTEGER := (SELECT count(*)
+                                FROM fld
+                                WHERE entr = new.id);
+    f               INTEGER;
+BEGIN
+    new.score := definitionCount + posCount + fldCount;
+
+    FOR f IN SELECT kw
+             FROM freq
+             WHERE freq.entr = new.id
+        LOOP
+            IF f IN (1, 7, 4, 2) THEN
+                new.score := new.score + 5;
+            END IF;
+            IF f IN (3, 5, 6) THEN
+                new.score := new.score + 1;
+            END IF;
+        END LOOP;
+
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER word_trigger ON entr;
+CREATE TRIGGER word_trigger
+    BEFORE UPDATE OR INSERT
+    ON entr
+EXECUTE PROCEDURE score_word();
+
+CREATE OR REPLACE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
+    RETURNS TABLE
+            (
+                entry INTEGER
+            )
+AS
+$$
+BEGIN
+    RETURN QUERY SELECT id
+                 FROM entr
+                 WHERE id IN (SELECT entr
+                              FROM gloss
+                              WHERE regexp_replace(lower(txt), '\s\(.*\)', '') = lower(query)
+                              UNION
+                              SELECT entr
+                              FROM kanj
+                              WHERE txt % query
+                              UNION
+                              SELECT entr
+                              FROM rdng
+                              WHERE txt IN (hiragana(japanese),
+                                            katakana(japanese))
+                                 OR entr::text = ANY (regexp_split_to_array(query, ','))
+                              LIMIT pageSize
+                              OFFSET
+                              page * pageSize)
+                 ORDER BY score DESC;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE TABLE IF NOT EXISTS users
 (
