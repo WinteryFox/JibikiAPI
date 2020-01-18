@@ -23,6 +23,9 @@ CREATE INDEX sentences_id_cast_index ON sentences (CAST(id AS TEXT));
 DROP INDEX IF EXISTS reading_reading_stripped_index;
 CREATE INDEX reading_reading_stripped_index ON reading (REPLACE(reading, '.', ''));
 
+DROP INDEX IF EXISTS reading_entr_cast_index;
+CREATE INDEX reading_entr_cast_index ON rdng (CAST(entr AS TEXT));
+
 DROP MATERIALIZED VIEW IF EXISTS mv_kanji;
 CREATE MATERIALIZED VIEW mv_kanji AS
 SELECT json_build_object(
