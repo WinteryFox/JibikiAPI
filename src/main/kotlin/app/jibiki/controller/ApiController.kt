@@ -114,23 +114,32 @@ class ApiController(
     @RequestMapping(method = [RequestMethod.GET], value = ["/users/@me"], produces = ["application/json"])
     fun getMe(
             @CookieValue("token")
-            token: String
+            token: String?
     ): Mono<ResponseEntity<String>> {
+        require(token != null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build<String>())
+        }
+
         return database
                 .getSelf(token)
                 .map { ResponseEntity.status(HttpStatus.OK).body(it) }
                 .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()))
+                .onErrorReturn(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build())
     }
 
     @RequestMapping(method = [RequestMethod.PUT], value = ["/users/bookmarks"])
     fun createBookmark(
             @CookieValue("token")
-            token: String,
+            token: String?,
             @RequestParam("type")
             type: Int,
             @RequestParam("bookmark")
             bookmark: Int
     ): Mono<ResponseEntity<Void>> {
+        require(token != null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build<Void>())
+        }
+
         return database
                 .createBookmark(token, type, bookmark)
                 .filter { it > 0 }
@@ -141,12 +150,16 @@ class ApiController(
     @RequestMapping(method = [RequestMethod.DELETE], value = ["/users/bookmarks"])
     fun deleteBookmark(
             @CookieValue("token")
-            token: String,
+            token: String?,
             @RequestParam("type")
             type: Int,
             @RequestParam("bookmark")
             bookmark: Int
     ): Mono<ResponseEntity<Void>> {
+        require(token != null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build<Void>())
+        }
+
         return database
                 .deleteBookmark(token, type, bookmark)
                 .filter { it > 0 }
