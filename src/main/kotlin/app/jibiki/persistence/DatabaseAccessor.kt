@@ -119,19 +119,29 @@ FROM (SELECT json_build_object(
                      'id', source.id,
                      'language', source.lang,
                      'sentence', source.sentence,
+                     'audio_uri',
+                     (SELECT 'https://audio.tatoeba.org/sentences/' || source.lang || '/' || source.id || '.mp3'
+                      WHERE source.audio IS NOT NULL),
                      'translations', json_agg(
                              json_build_object(
                                      'id', translations.id,
                                      'language', translations.lang,
-                                     'sentence', translations.sentence
+                                     'sentence', translations.sentence,
+                                     'audio_uri', (SELECT 'https://audio.tatoeba.org/sentences/' || translations.lang ||
+                                                          '/' || translations.id || '.mp3'
+                                                   WHERE translations.audio IS NOT NULL)
                                  )
                          )
                  ) json
       FROM links
-               JOIN sentences source
+               JOIN (SELECT id, lang, sentences.sentence, a.sentence audio
+                     FROM sentences
+                              LEFT JOIN audio a ON sentences.id = a.sentence) source
                     ON (source.id = links.translation OR source.id = links.source)
                         AND source.lang = :source
-               JOIN sentences translations
+               JOIN (SELECT id, lang, sentences.sentence, a2.sentence audio
+                     FROM sentences
+                              LEFT JOIN audio a2 ON sentences.id = a2.sentence) translations
                     ON (translations.id = links.translation OR translations.id = links.source)
                         AND translations.lang = :target
       WHERE source = ANY (SELECT *
@@ -144,11 +154,11 @@ FROM (SELECT json_build_object(
                                 UNION
                                 SELECT entries.id entries
                                 FROM sentences entries
-                                WHERE entries.id::text = ANY(regexp_split_to_array(:query, ','))) entries
+                                WHERE entries.id::text = ANY (regexp_split_to_array(:query, ','))) entries
                           LIMIT :pageSize
                           OFFSET
                           :page * :pageSize)
-      GROUP BY source.id) json
+      GROUP BY source.id, source.lang, source.sentence, source.audio) json
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)

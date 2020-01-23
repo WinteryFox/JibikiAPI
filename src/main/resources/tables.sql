@@ -162,18 +162,17 @@ ALTER TABLE entr
 CREATE OR REPLACE FUNCTION score_word() RETURNS TRIGGER AS
 $$
 DECLARE
-    definitionCount INTEGER := (SELECT count(*)
-                                FROM gloss
-                                WHERE entr = new.id);
-    posCount        INTEGER := (SELECT count(*)
-                                FROM pos
-                                WHERE entr = new.id);
-    fldCount        INTEGER := (SELECT count(*)
-                                FROM fld
-                                WHERE entr = new.id);
-    f               INTEGER;
+    f INTEGER;
 BEGIN
-    new.score := definitionCount + posCount + fldCount;
+    new.score := (SELECT count(*)
+                  FROM gloss
+                  WHERE entr = new.id) +
+                 (SELECT count(*)
+                  FROM pos
+                  WHERE entr = new.id) +
+                 (SELECT count(*)
+                  FROM fld
+                  WHERE entr = new.id);
 
     FOR f IN SELECT kw
              FROM freq
@@ -191,11 +190,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER word_trigger ON entr;
+DROP TRIGGER IF EXISTS word_trigger ON entr;
 CREATE TRIGGER word_trigger
     BEFORE UPDATE OR INSERT
     ON entr
+    FOR EACH ROW
 EXECUTE PROCEDURE score_word();
+
+UPDATE entr
+SET score = 0;
 
 CREATE OR REPLACE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
     RETURNS TABLE
