@@ -33,14 +33,8 @@ FROM (SELECT json_build_object(
                     ON forms.entr = entry.id
                JOIN mv_senses senses
                     ON senses.entr = entry.id
-               LEFT JOIN mv_example example
-                         ON example.id = (SELECT e.id
-                                          FROM mv_example e
-                                          WHERE e.tsv @@
-                                                plainto_tsquery('japanese', forms.json -> 0 -> 'kanji' ->> 'literal')
-                                             OR e.tsv @@
-                                                plainto_tsquery('japanese', forms.json -> 0 -> 'reading' ->> 'literal')
-                                          LIMIT 1)
+               LEFT JOIN mv_translated_sentences example
+                         ON (example.json ->> 'id')::integer = (SELECT get_sentences(:query, 0, 10000, 0, 50) LIMIT 1)
                LEFT JOIN mv_kanji kanji
                          ON kanji.json ->> 'literal' = ANY
                             (regexp_split_to_array(forms.json -> 0 -> 'kanji' ->> 'literal', '\.*'))
@@ -112,53 +106,15 @@ OFFSET
                 .map { (it["json"] as Json).asString() }
     }
 
-    fun getSentences(query: String, page: Int, minLength: Int, maxLength: Int, source: String, target: String): Mono<String> {
+    fun getSentences(query: String, page: Int, minLength: Int, maxLength: Int, source: String): Mono<String> {
         return client.execute("""
-SELECT coalesce(json_agg(json), '[]'::json) json
-FROM (SELECT json_build_object(
-                     'id', source.id,
-                     'language', source.lang,
-                     'sentence', source.sentence,
-                     'audio_uri',
-                     (SELECT 'https://audio.tatoeba.org/sentences/' || source.lang || '/' || source.id || '.mp3'
-                      WHERE source.audio IS NOT NULL),
-                     'translations', json_agg(
-                             json_build_object(
-                                     'id', translations.id,
-                                     'language', translations.lang,
-                                     'sentence', translations.sentence,
-                                     'audio_uri', (SELECT 'https://audio.tatoeba.org/sentences/' || translations.lang ||
-                                                          '/' || translations.id || '.mp3'
-                                                   WHERE translations.audio IS NOT NULL)
-                                 )
-                         )
-                 ) json
-      FROM links
-               JOIN (SELECT id, lang, sentences.sentence, a.sentence audio
-                     FROM sentences
-                              LEFT JOIN audio a ON sentences.id = a.sentence) source
-                    ON (source.id = links.translation OR source.id = links.source)
-                        AND source.lang = :source
-               JOIN (SELECT id, lang, sentences.sentence, a2.sentence audio
-                     FROM sentences
-                              LEFT JOIN audio a2 ON sentences.id = a2.sentence) translations
-                    ON (translations.id = links.translation OR translations.id = links.source)
-                        AND translations.lang = :target
-      WHERE source = ANY (SELECT *
-                          FROM (SELECT entries.id entries
-                                FROM sentences entries
-                                WHERE entries.tsv @@ plainto_tsquery('japanese', :query)
-                                  AND (entries.lang IN ('eng', 'jpn'))
-                                  AND length(entries.sentence) > :minLength
-                                  AND length(entries.sentence) < :maxLength
-                                UNION
-                                SELECT entries.id entries
-                                FROM sentences entries
-                                WHERE entries.id::text = ANY (regexp_split_to_array(:query, ','))) entries
-                          LIMIT :pageSize
-                          OFFSET
-                          :page * :pageSize)
-      GROUP BY source.id, source.lang, source.sentence, source.audio) json
+SELECT coalesce(jsonb_agg(json), '[]'::jsonb) json
+FROM links
+         JOIN get_sentences(:query, :minLength, :maxLength, :page, :pageSize) entries
+              ON entries = links.source
+         JOIN mv_translated_sentences
+              ON (mv_translated_sentences.json ->> 'id')::integer IN (links.source, links.translation)
+                  AND mv_translated_sentences.json ->> 'language' = :source
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)
@@ -166,7 +122,6 @@ FROM (SELECT json_build_object(
                 .bind("minLength", minLength)
                 .bind("maxLength", maxLength)
                 .bind("source", source)
-                .bind("target", target)
                 .fetch()
                 .first()
                 .map { (it["json"] as Json).asString() }

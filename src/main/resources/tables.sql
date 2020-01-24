@@ -63,33 +63,68 @@ FROM character
 VACUUM ANALYZE mv_kanji;
 CREATE INDEX mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
 
-DROP MATERIALIZED VIEW IF EXISTS mv_example;
-CREATE MATERIALIZED VIEW mv_example AS
+DROP MATERIALIZED VIEW IF EXISTS mv_sentences;
+CREATE MATERIALIZED VIEW mv_sentences AS
 SELECT json_build_object(
                'id', sentences.id,
                'language', sentences.lang,
                'sentence', sentences.sentence,
-               'translations', json_agg(
-                       json_build_object(
-                               'id', translation.id,
-                               'language', translation.lang,
-                               'sentence', translation.sentence
-                           )
-                   )
-           )::jsonb json,
-       sentences.id,
-       sentences.tsv
+               'audio_uri', CASE
+                                WHEN audio.sentence IS NOT NULL THEN
+                                                    'https://audio.tatoeba.org/sentences/' || sentences.lang || '/' ||
+                                                    sentences.id || '.mp3' END
+           )::jsonb json
 FROM sentences
-         JOIN links
-              ON links.source = sentences.id
-         JOIN sentences translation
-              ON translation.id = links.translation
-                  AND translation.lang = 'eng'
-WHERE sentences.lang = 'jpn'
-GROUP BY sentences.id;
-CREATE INDEX mv_example_id_index ON mv_example (id);
-CREATE INDEX mv_example_tsv_index ON mv_example USING gin (tsv);
-VACUUM ANALYZE mv_example;
+         LEFT JOIN audio on sentences.id = audio.sentence
+WHERE sentences.lang IN ('eng', 'jpn');
+VACUUM ANALYZE mv_sentences;
+
+DROP MATERIALIZED VIEW mv_translated_sentences;
+CREATE MATERIALIZED VIEW mv_translated_sentences AS
+SELECT jsonb_insert(
+               source.json,
+               '{translations}'::text[],
+               jsonb_agg(translations.json)
+           )::jsonb json
+FROM links
+         JOIN mv_sentences source ON links.source = (source.json ->> 'id')::integer
+         JOIN mv_sentences translations ON links.translation = (translations.json ->> 'id')::integer AND
+                                           translations.json ->> 'language' != source.json ->> 'language'
+GROUP BY source.json;
+VACUUM ANALYZE mv_translated_sentences;
+
+DROP INDEX IF EXISTS mv_translated_sentences_id_index;
+CREATE INDEX mv_translated_sentences_id_index ON mv_translated_sentences (((mv_translated_sentences.json ->> 'id')::integer));
+
+DROP INDEX IF EXISTS mv_translated_sentences_language_index;
+CREATE INDEX mv_translated_sentences_language_index ON mv_translated_sentences ((mv_translated_sentences.json ->> 'language'));
+
+DROP INDEX IF EXISTS mv_translated_sentences_id_language_index;
+CREATE INDEX mv_translated_sentences_id_language_index ON mv_translated_sentences (((mv_translated_sentences.json ->> 'id')::integer),
+                                                                                   (mv_translated_sentences.json ->> 'language'));
+
+DROP FUNCTION IF EXISTS get_sentences;
+CREATE OR REPLACE FUNCTION get_sentences(query TEXT, minLength INT, maxLength INT, page INT, pageSize INT)
+    RETURNS TABLE
+            (
+                entry INTEGER
+            )
+AS
+$$
+SELECT *
+FROM (SELECT entries.id entries
+      FROM sentences entries
+      WHERE entries.tsv @@ plainto_tsquery('japanese', query)
+        AND (entries.lang IN ('eng', 'jpn'))
+        AND length(entries.sentence) BETWEEN minLength AND maxLength
+      UNION
+      SELECT entries.id entries
+      FROM sentences entries
+      WHERE entries.id::text = ANY (regexp_split_to_array(query, ','))) entries
+LIMIT pageSize
+OFFSET
+page * pageSize;
+$$ LANGUAGE SQL STABLE;
 
 DROP MATERIALIZED VIEW IF EXISTS mv_senses;
 CREATE MATERIALIZED VIEW mv_senses AS
