@@ -63,7 +63,7 @@ FROM character
 VACUUM ANALYZE mv_kanji;
 CREATE INDEX mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
 
-DROP MATERIALIZED VIEW IF EXISTS mv_sentences;
+DROP MATERIALIZED VIEW IF EXISTS mv_sentences CASCADE;
 CREATE MATERIALIZED VIEW mv_sentences AS
 SELECT json_build_object(
                'id', sentences.id,
@@ -111,19 +111,23 @@ CREATE OR REPLACE FUNCTION get_sentences(query TEXT, minLength INT, maxLength IN
             )
 AS
 $$
-SELECT *
-FROM (SELECT entries.id entries
-      FROM sentences entries
-      WHERE entries.tsv @@ plainto_tsquery('japanese', query)
-        AND (entries.lang IN ('eng', 'jpn'))
-        AND length(entries.sentence) BETWEEN minLength AND maxLength
-      UNION
-      SELECT entries.id entries
-      FROM sentences entries
-      WHERE entries.id::text = ANY (regexp_split_to_array(query, ','))) entries
-LIMIT pageSize
-OFFSET
-page * pageSize;
+WITH entries AS (
+    SELECT entries.id entry, tsv
+    FROM sentences entries
+    WHERE entries.tsv @@ plainto_tsquery('japanese', query)
+      AND (entries.lang IN ('eng', 'jpn'))
+      AND length(entries.sentence) BETWEEN minLength AND maxLength
+    UNION ALL
+    SELECT entries.id entry, tsv
+    FROM sentences entries
+    WHERE entries.id::text = ANY (regexp_split_to_array(query, ','))
+    LIMIT pageSize
+    OFFSET
+    page * pageSize
+)
+SELECT entry
+FROM entries
+ORDER BY ts_rank(tsv, plainto_tsquery('japanese', query)) DESC;
 $$ LANGUAGE SQL STABLE;
 
 DROP MATERIALIZED VIEW IF EXISTS mv_senses;
