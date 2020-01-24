@@ -79,7 +79,7 @@ FROM sentences
 WHERE sentences.lang IN ('eng', 'jpn');
 VACUUM ANALYZE mv_sentences;
 
-DROP MATERIALIZED VIEW mv_translated_sentences;
+DROP MATERIALIZED VIEW IF EXISTS mv_translated_sentences;
 CREATE MATERIALIZED VIEW mv_translated_sentences AS
 SELECT jsonb_insert(
                source.json,

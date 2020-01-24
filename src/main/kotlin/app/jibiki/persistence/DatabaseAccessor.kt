@@ -108,13 +108,15 @@ OFFSET
 
     fun getSentences(query: String, page: Int, minLength: Int, maxLength: Int, source: String): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(json), '[]'::jsonb) json
-FROM links
-         JOIN get_sentences(:query, :minLength, :maxLength, :page, :pageSize) entries
-              ON entries = links.source
-         JOIN mv_translated_sentences
-              ON (mv_translated_sentences.json ->> 'id')::integer IN (links.source, links.translation)
-                  AND mv_translated_sentences.json ->> 'language' = :source
+SELECT coalesce(jsonb_agg(json.json), '[]'::jsonb) json
+FROM (SELECT json json
+      FROM links
+               JOIN get_sentences(:query, :minLength, :maxLength, :page, :pageSize) entries
+                    ON entries = links.source
+               JOIN mv_translated_sentences
+                    ON (mv_translated_sentences.json ->> 'id')::integer IN (links.source, links.translation)
+                        AND mv_translated_sentences.json ->> 'language' = :source
+      GROUP BY mv_translated_sentences.json) json
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)
