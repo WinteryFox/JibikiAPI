@@ -62,14 +62,12 @@ class ApiController(
             @RequestParam("maxLength", defaultValue = "10000")
             maxLength: Int,
             @RequestParam("source", defaultValue = "eng")
-            source: String,
-            @RequestParam("target", defaultValue = "jpn")
-            target: String
+            source: String
     ): Mono<String> {
         if (query.isEmpty())
             return Mono.just("[]")
 
-        return database.getSentences(query, page, minLength, maxLength, source, target)
+        return database.getSentences(query, page, minLength, maxLength, source)
     }
 
     @RequestMapping(method = [RequestMethod.POST], value = ["/users/create"], consumes = ["application/x-www-form-urlencoded"])
