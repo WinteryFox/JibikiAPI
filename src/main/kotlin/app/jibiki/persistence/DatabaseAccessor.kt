@@ -18,28 +18,20 @@ class DatabaseAccessor {
     fun getAll(query: String, page: Int): Mono<String> {
         return client.execute("""
 SELECT coalesce(json_agg(json.json), '[]'::json) json
-FROM (SELECT json_build_object(
-                     'word', json_build_object(
-                'id', entry.id,
-                'forms', forms.json,
-                'senses', senses.json
-            ),
+FROM (SELECT jsonb_build_object(
+                     'word', mv_words.json,
                      'sentence', example.json,
                      'kanji', coalesce(array_to_json(array_remove(array_agg(kanji.json), null)), '[]'::json)
                  ) json
       FROM entr entry
-               JOIN get_words(:query, :japanese, :page, :pageSize) ON id = get_words
-               JOIN mv_forms forms
-                    ON forms.entr = entry.id
-               JOIN mv_senses senses
-                    ON senses.entr = entry.id
+               JOIN get_words(:query, :japanese, :page, :pageSize) words ON words = id
+               JOIN mv_words ON (mv_words.json ->> 'id')::integer = id
                LEFT JOIN mv_translated_sentences example
                          ON (example.json ->> 'id')::integer = (SELECT get_sentences(:query, 0, 10000, 0, 50) LIMIT 1)
                LEFT JOIN mv_kanji kanji
                          ON kanji.json ->> 'literal' = ANY
-                            (regexp_split_to_array(forms.json -> 0 -> 'kanji' ->> 'literal', '\.*'))
-      WHERE src != 3
-      GROUP BY entry.id, forms.json, senses.json, example.json) json
+                            (regexp_split_to_array(mv_words.json -> 'forms' -> 0 -> 'kanji' ->> 'literal', '\.*'))
+      GROUP BY mv_words.json, example.json) json
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)
@@ -52,18 +44,10 @@ FROM (SELECT json_build_object(
 
     fun getWords(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(json_agg(json_build_object(
-        'id', entry.id,
-        'forms', forms.json,
-        'senses', senses.json
-    )), '[]'::json) json
-FROM entr entry
-         JOIN get_words(:query, :japanese, :page, :pageSize) ON id = get_words
-         JOIN mv_forms forms
-              ON forms.entr = entry.id
-         JOIN mv_senses senses
-              ON senses.entr = entry.id
-  AND src != 3
+SELECT coalesce(jsonb_agg(json), '[]'::jsonb) json
+FROM mv_words
+         JOIN get_words(:query, :japanese, :page, :pageSize) words
+              ON (json ->> 'id')::integer = words
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)

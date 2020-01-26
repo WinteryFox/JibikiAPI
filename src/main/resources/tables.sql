@@ -130,7 +130,7 @@ FROM entries
 ORDER BY ts_rank(tsv, plainto_tsquery('japanese', query)) DESC;
 $$ LANGUAGE SQL STABLE;
 
-DROP MATERIALIZED VIEW IF EXISTS mv_senses;
+DROP MATERIALIZED VIEW IF EXISTS mv_senses CASCADE;
 CREATE MATERIALIZED VIEW mv_senses AS
 SELECT entr,
        json_agg(
@@ -268,6 +268,23 @@ BEGIN
                  ORDER BY score DESC;
 END;
 $$ LANGUAGE plpgsql;
+
+DROP MATERIALIZED VIEW mv_words;
+CREATE MATERIALIZED VIEW mv_words AS
+SELECT jsonb_build_object(
+               'id', entry.id,
+               'jlpt', entry.jlpt,
+               'forms', forms.json,
+               'senses', senses.json
+           ) json
+FROM entr entry
+         JOIN mv_forms forms
+              ON forms.entr = entry.id
+         JOIN mv_senses senses
+              ON senses.entr = entry.id
+WHERE src != 3;
+
+CREATE INDEX IF NOT EXISTS mv_words_id_index ON mv_words (((json ->> 'id')::integer));
 
 CREATE TABLE IF NOT EXISTS users
 (
