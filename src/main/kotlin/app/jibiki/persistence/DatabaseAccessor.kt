@@ -17,7 +17,7 @@ class DatabaseAccessor {
 
     fun getAll(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(json_agg(json.json), '[]'::json) json
+SELECT coalesce(jsonb_agg(json.json), '[]'::jsonb) json
 FROM (SELECT jsonb_build_object(
                      'word', mv_words.json,
                      'sentence', example.json,
@@ -60,7 +60,7 @@ FROM mv_words
 
     fun getKanji(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(json_agg(json), '[]'::json) json
+SELECT coalesce(jsonb_agg(json), '[]'::jsonb) json
 FROM mv_kanji
 WHERE (json ->> 'id')::integer = ANY (SELECT character
                                       FROM meaning
@@ -119,7 +119,7 @@ SELECT :snowflake, :email, crypt(:password, gen_salt('md5')), :username
 WHERE NOT exists(
         SELECT * FROM users WHERE email = :email
     )
-RETURNING json_build_object(
+RETURNING jsonb_build_object(
         'snowflake', snowflake
     ) json
         """)
@@ -162,14 +162,14 @@ WHERE token = :token
 
     fun getSelf(token: String): Mono<String> {
         return client.execute("""
-SELECT json_build_object(
+SELECT jsonb_build_object(
                'snowflake', users.snowflake,
                'email', users.email,
                'username', users.username,
-               'bookmarks', json_build_object(
-                       'words', coalesce(json_agg(b.bookmark) FILTER (WHERE b.type = 0), '[]'::json),
-                       'kanji', coalesce(json_agg(b.bookmark) FILTER (WHERE b.type = 1), '[]'::json),
-                       'sentences', coalesce(json_agg(b.bookmark) FILTER (WHERE b.type = 2), '[]'::json)
+               'bookmarks', jsonb_build_object(
+                       'words', coalesce(jsonb_agg(b.bookmark) FILTER (WHERE b.type = 0), '[]'::jsonb),
+                       'kanji', coalesce(jsonb_agg(b.bookmark) FILTER (WHERE b.type = 1), '[]'::jsonb),
+                       'sentences', coalesce(jsonb_agg(b.bookmark) FILTER (WHERE b.type = 2), '[]'::jsonb)
                    )
            ) json
 FROM users
