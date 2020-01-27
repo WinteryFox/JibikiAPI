@@ -28,15 +28,15 @@ CREATE INDEX reading_entr_cast_index ON rdng (CAST(entr AS TEXT));
 
 DROP MATERIALIZED VIEW IF EXISTS mv_kanji;
 CREATE MATERIALIZED VIEW mv_kanji AS
-SELECT json_build_object(
+SELECT jsonb_build_object(
                'id', character.id,
                'literal', character.literal,
                'definitions', meaning.json,
-               'readings', json_build_object(
-                       'onyomi', coalesce(readings.onyomi, '[]'::json),
-                       'kunyomi', coalesce(readings.kunyomi, '[]'::json)
+               'readings', jsonb_build_object(
+                       'onyomi', coalesce(readings.onyomi, '[]'::jsonb),
+                       'kunyomi', coalesce(readings.kunyomi, '[]'::jsonb)
                    ),
-               'miscellaneous', json_build_object(
+               'miscellaneous', jsonb_build_object(
                        'grade', misc.grade,
                        'stroke_count', misc.stroke_count,
                        'frequency', misc.frequency,
@@ -45,18 +45,18 @@ SELECT json_build_object(
                        'jlpt', misc.jlpt,
                        'radical_name', misc.radical_name
                    )
-           )::jsonb json
+           ) json
 FROM character
          LEFT JOIN (SELECT character,
-                           json_agg(meaning) json
+                           jsonb_agg(meaning) json
                     FROM meaning
                     WHERE language = 'en'
                     GROUP BY character) meaning
                    ON meaning.character = character.id
          LEFT JOIN miscellaneous misc on character.id = misc.character
          LEFT JOIN (SELECT character,
-                           json_agg(reading) FILTER (WHERE type = 'ja_on')  onyomi,
-                           json_agg(reading) FILTER (WHERE type = 'ja_kun') kunyomi
+                           jsonb_agg(reading) FILTER (WHERE type = 'ja_on')  onyomi,
+                           jsonb_agg(reading) FILTER (WHERE type = 'ja_kun') kunyomi
                     FROM reading
                     GROUP BY character) readings
                    ON readings.character = character.id;
@@ -65,7 +65,7 @@ CREATE INDEX mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
 
 DROP MATERIALIZED VIEW IF EXISTS mv_sentences CASCADE;
 CREATE MATERIALIZED VIEW mv_sentences AS
-SELECT json_build_object(
+SELECT jsonb_build_object(
                'id', sentences.id,
                'language', sentences.lang,
                'sentence', sentences.sentence,
@@ -73,7 +73,7 @@ SELECT json_build_object(
                                 WHEN audio.sentence IS NOT NULL THEN
                                                     'https://audio.tatoeba.org/sentences/' || sentences.lang || '/' ||
                                                     sentences.id || '.mp3' END
-           )::jsonb json
+           ) json
 FROM sentences
          LEFT JOIN audio on sentences.id = audio.sentence
 WHERE sentences.lang IN ('eng', 'jpn');
@@ -85,7 +85,7 @@ SELECT jsonb_insert(
                source.json,
                '{translations}'::text[],
                jsonb_agg(translations.json)
-           )::jsonb json
+           ) json
 FROM links
          JOIN mv_sentences source ON links.source = (source.json ->> 'id')::integer
          JOIN mv_sentences translations ON links.translation = (translations.json ->> 'id')::integer AND
@@ -133,37 +133,37 @@ $$ LANGUAGE SQL STABLE;
 DROP MATERIALIZED VIEW IF EXISTS mv_senses CASCADE;
 CREATE MATERIALIZED VIEW mv_senses AS
 SELECT entr,
-       json_agg(
-               json_build_object(
+       jsonb_agg(
+               jsonb_build_object(
                        'definitions', gloss.txt,
                        'part_of_speech', coalesce(pos, '[]'::jsonb),
                        'field_of_use', coalesce(fld, '[]'::jsonb),
                        'miscellaneous', coalesce(descr, '[]'::jsonb)
                    )
-           )::jsonb json
+           ) json
 FROM (SELECT gloss.entr                entr,
-             json_agg(gloss.txt)       txt,
+             jsonb_agg(gloss.txt)       txt,
              min(pos.pos::text)::jsonb pos,
              min(fld.fld::text)::jsonb fld,
              misc.descr
       FROM gloss
                LEFT JOIN (SELECT pos.entr,
                                  pos.sens,
-                                 json_agg(
-                                         json_build_object('short', kwpos.kw, 'long', kwpos.descr))::jsonb pos
+                                 jsonb_agg(
+                                         jsonb_build_object('short', kwpos.kw, 'long', kwpos.descr)) pos
                           FROM pos
                                    JOIN kwpos ON pos.kw = kwpos.id
                           GROUP BY pos.entr, pos.sens) pos
                          ON pos.entr = gloss.entr AND pos.sens = gloss.sens
                LEFT JOIN (SELECT fld.entr,
                                  fld.sens,
-                                 json_agg(
-                                         json_build_object('short', kwfld.kw, 'long', kwfld.descr))::jsonb fld
+                                 jsonb_agg(
+                                         jsonb_build_object('short', kwfld.kw, 'long', kwfld.descr)) fld
                           FROM fld
                                    JOIN kwfld ON fld.kw = kwfld.id
                           GROUP BY fld.entr, fld.sens) fld
                          ON fld.entr = gloss.entr AND fld.sens = gloss.sens
-               LEFT JOIN (SELECT misc.entr, misc.sens, json_agg(kwmisc.descr)::jsonb descr
+               LEFT JOIN (SELECT misc.entr, misc.sens, jsonb_agg(kwmisc.descr) descr
                           FROM misc
                                    LEFT JOIN kwmisc ON misc.kw = kwmisc.id
                           GROUP BY misc.entr, misc.sens) misc
@@ -176,10 +176,10 @@ VACUUM ANALYZE mv_senses;
 DROP MATERIALIZED VIEW IF EXISTS mv_forms;
 CREATE MATERIALIZED VIEW mv_forms AS
 SELECT reading.entr,
-       json_agg(json_build_object(
-               'kanji', json_build_object('literal', kanji.txt, 'info', kinf.descr),
-               'reading', json_build_object('literal', reading.txt, 'info', rinf.descr)
-           ))::jsonb json
+       jsonb_agg(jsonb_build_object(
+               'kanji', jsonb_build_object('literal', kanji.txt, 'info', kinf.descr),
+               'reading', jsonb_build_object('literal', reading.txt, 'info', rinf.descr)
+           )) json
 FROM rdng reading
          LEFT JOIN (SELECT kwrinf.descr, rinf.entr, rinf.rdng
                     FROM rinf
@@ -237,7 +237,8 @@ CREATE TRIGGER word_trigger
 EXECUTE PROCEDURE score_word();
 
 UPDATE entr
-SET score = 0;
+SET score = 0
+WHERE TRUE;
 
 CREATE OR REPLACE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
     RETURNS TABLE
@@ -269,7 +270,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP MATERIALIZED VIEW mv_words;
+DROP MATERIALIZED VIEW IF EXISTS mv_words;
 CREATE MATERIALIZED VIEW mv_words AS
 SELECT jsonb_build_object(
                'id', entry.id,
