@@ -72,11 +72,14 @@ SELECT jsonb_build_object(
                'audio_uri', CASE
                                 WHEN audio.sentence IS NOT NULL THEN
                                                     'https://audio.tatoeba.org/sentences/' || sentences.lang || '/' ||
-                                                    sentences.id || '.mp3' END
+                                                    sentences.id || '.mp3' END,
+               'tags', coalesce(jsonb_agg(tags.tag) FILTER (WHERE tag != 'null'), '[]'::jsonb)
            ) json
 FROM sentences
          LEFT JOIN audio on sentences.id = audio.sentence
-WHERE sentences.lang IN ('eng', 'jpn');
+         LEFT JOIN tags on sentences.id = tags.sentence
+WHERE sentences.lang IN ('eng', 'jpn')
+GROUP BY sentences.id, audio.sentence;
 VACUUM ANALYZE mv_sentences;
 
 DROP MATERIALIZED VIEW IF EXISTS mv_translated_sentences;
