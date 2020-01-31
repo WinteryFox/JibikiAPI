@@ -15,28 +15,44 @@ class DatabaseAccessor {
 
     private val pageSize = 50
 
-    fun getAll(query: String, page: Int): Mono<String> {
+    fun getAll(query: String, sentenceCount: Int, page: Int): Mono<String> {
         return client.execute("""
 SELECT coalesce(jsonb_agg(json.json), '[]'::jsonb) json
 FROM (SELECT jsonb_build_object(
                      'word', mv_words.json,
-                     'sentence', example.json,
-                     'kanji', coalesce(array_to_json(array_remove(array_agg(kanji.json), null)), '[]'::json)
+                     'sentences',
+                     coalesce(jsonb_agg(DISTINCT example.json) FILTER (WHERE example.json IS NOT NULL), '[]'::jsonb),
+                     'kanji',
+                     coalesce(jsonb_agg(DISTINCT kanji.json) FILTER (WHERE example.json IS NOT NULL), '[]'::jsonb)
                  ) json
-      FROM entr entry
-               JOIN get_words(:query, :japanese, :page, :pageSize) words ON words = id
-               JOIN mv_words ON (mv_words.json ->> 'id')::integer = id
-               LEFT JOIN mv_translated_sentences example
-                         ON (example.json ->> 'id')::integer = (SELECT get_sentences(:query, 0, 10000, 0, 50) LIMIT 1)
+      FROM mv_words
+               JOIN get_words(:query, :japanese, :page, :pageSize) words
+                    ON (mv_words.json ->> 'id')::integer = words
                LEFT JOIN mv_kanji kanji
                          ON kanji.json ->> 'literal' = ANY
                             (regexp_split_to_array(mv_words.json -> 'forms' -> 0 -> 'kanji' ->> 'literal', '\.*'))
-      GROUP BY mv_words.json, example.json) json
+               LEFT JOIN get_sentences(
+              CASE
+                  WHEN mv_words.json -> 'forms' -> 0 -> 'kanji' ->> 'literal' IS NOT NULL THEN
+                      mv_words.json -> 'forms' -> 0 -> 'kanji' ->> 'literal'
+                  ELSE
+                      mv_words.json -> 'forms' -> 0 -> 'reading' ->> 'literal'
+                  END,
+              0,
+              10000,
+              0,
+              :sentenceCount
+          ) s
+                         ON TRUE
+               LEFT JOIN mv_translated_sentences example
+                         ON (example.json ->> 'id')::integer = s
+      GROUP BY mv_words.json) json
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)
                 .bind("query", query)
                 .bind("japanese", converter.convertRomajiToHiragana(query))
+                .bind("sentenceCount", sentenceCount)
                 .fetch()
                 .first()
                 .map { (it["json"] as Json).asString() }

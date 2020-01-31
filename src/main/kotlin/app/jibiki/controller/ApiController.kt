@@ -16,13 +16,15 @@ class ApiController(
     fun getAll(
             @RequestParam("query")
             query: String,
+            @RequestParam("sentenceCount", defaultValue = "1")
+            sentenceCount: Int,
             @RequestParam("page", defaultValue = "0")
             page: Int
     ): Mono<String> {
         if (query.isEmpty())
             return Mono.just("[]")
 
-        return database.getAll(query, page)
+        return database.getAll(query, sentenceCount, page)
     }
 
     @RequestMapping(method = [RequestMethod.GET], value = ["/words"], produces = ["application/json"])
