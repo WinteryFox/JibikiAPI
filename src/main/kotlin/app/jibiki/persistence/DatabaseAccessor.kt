@@ -20,10 +20,10 @@ class DatabaseAccessor {
 SELECT coalesce(jsonb_agg(json.json), '[]'::jsonb) json
 FROM (SELECT jsonb_build_object(
                      'word', mv_words.json,
-                     'sentences',
-                     coalesce(jsonb_agg(DISTINCT example.json) FILTER (WHERE example.json IS NOT NULL), '[]'::jsonb),
                      'kanji',
-                     coalesce(jsonb_agg(DISTINCT kanji.json) FILTER (WHERE example.json IS NOT NULL), '[]'::jsonb)
+                     coalesce(jsonb_agg(DISTINCT kanji.json) FILTER (WHERE kanji.json IS NOT NULL), '[]'::jsonb),
+                     'sentences',
+                     coalesce(jsonb_agg(DISTINCT example.json) FILTER (WHERE example.json IS NOT NULL), '[]'::jsonb)
                  ) json
       FROM mv_words
                JOIN get_words(:query, :japanese, :page, :pageSize) words
