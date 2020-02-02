@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y gnupg2 wget
 RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ bionic-pgdg main" > /etc/apt/sources.list.d/pgdg.list
 RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
 RUN sed -i'' 's/archive.ubuntu.com/us.archive.ubuntu.com/' /etc/apt/sources.list
-RUN apt-get update && apt-get install -y postgresql-server-dev-11 libmecab-dev postgresql-11 curl python3-venv python3-pip default-jre git maven expect
+RUN apt-get update && apt-get install -y postgresql-server-dev-11 libmecab-dev postgresql-11 curl python3-venv python3-pip default-jre git maven expect mecab-jumandic mecab-jumandic-utf8 mecab-utils
 
 RUN sed -i 's/peer/trust/g' /etc/postgresql/11/main/pg_hba.conf
 RUN sed -i 's/md5/trust/g' /etc/postgresql/11/main/pg_hba.conf
@@ -45,6 +45,13 @@ COPY ./jlptclassifier.exp .
 RUN chmod +x ./jlptclassifier.exp
 RUN /etc/init.d/postgresql restart && ./jlptclassifier.exp && /etc/init.d/postgresql stop
 
+RUN echo "host all  all    0.0.0.0/0  trust" >> /etc/postgresql/11/main/pg_hba.conf
+RUN echo "listen_addresses='*'" >> /etc/postgresql/11/main/postgresql.conf
+
+WORKDIR /var/jibiki_deps/misc
+COPY ./tables_readonly.sql ./tables_readonly.sql
+RUN /etc/init.d/postgresql restart && psql -U postgres -f ./tables_readonly.sql jibiki && /etc/init.d/postgresql stop
+
 USER postgres
-CMD /usr/lib/postgresql/11/bin/postgres -D /var/lib/postgresql/11/main -c config_file=/etc/postgresql/11/main/postgresql.conf
+CMD ["/usr/lib/postgresql/11/bin/postgres", "-D", "/var/lib/postgresql/11/main", "-c", "config_file=/etc/postgresql/11/main/postgresql.conf"]
 
