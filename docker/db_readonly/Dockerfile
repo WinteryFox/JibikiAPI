@@ -22,10 +22,12 @@ WORKDIR /var/jibiki_deps/jmdictdb
 RUN /etc/init.d/postgresql restart && make init && /etc/init.d/postgresql stop
 RUN python3 -m venv jmdictvenv
 RUN /etc/init.d/postgresql restart && /bin/bash -c "source jmdictvenv/bin/activate" && python3 -m pip install -Iv psycopg2==2.7.3.2 && make loadall && make activate DBACT=jibiki && /etc/init.d/postgresql stop
+RUN cd .. && rm -rf jmdictdb
 
 WORKDIR /var/jibiki_deps/textsearch_ja
 RUN make
 RUN make install
+RUN cd .. && rm -rf textsearch_ja
 
 WORKDIR /var/jibiki_deps/TatoebaPostgreSQL
 RUN mvn package
@@ -33,10 +35,12 @@ WORKDIR /var/jibiki_deps/TatoebaPostgreSQL/target
 COPY ./tatoeba.exp .
 RUN chmod +x ./tatoeba.exp
 RUN /etc/init.d/postgresql restart && ./tatoeba.exp && /etc/init.d/postgresql stop
+RUN cd .. && rm -rf TatoebaPostgreSQL
 
 WORKDIR /var/jibiki_deps/KanjidicParser
 RUN curl -L https://github.com/WinteryFox/KanjidicParser/releases/download/1.0.0/kanjidicparser.jar --output kanjidicparser.jar
 RUN /etc/init.d/postgresql restart && java -jar ./kanjidicparser.jar localhost jibiki postgres postgres && /etc/init.d/postgresql stop
+RUN cd .. && rm -rf KanjidicParser
 
 WORKDIR /var/jibiki_deps/JibikiJLPTClassifier
 RUN mvn package
@@ -44,6 +48,7 @@ WORKDIR /var/jibiki_deps/JibikiJLPTClassifier/target
 COPY ./jlptclassifier.exp .
 RUN chmod +x ./jlptclassifier.exp
 RUN /etc/init.d/postgresql restart && ./jlptclassifier.exp && /etc/init.d/postgresql stop
+RUN cd .. && rm -rf JibikiJLPTClassifier
 
 RUN echo "host all  all    0.0.0.0/0  trust" >> /etc/postgresql/11/main/pg_hba.conf
 RUN echo "listen_addresses='*'" >> /etc/postgresql/11/main/postgresql.conf
@@ -51,6 +56,8 @@ RUN echo "listen_addresses='*'" >> /etc/postgresql/11/main/postgresql.conf
 WORKDIR /var/jibiki_deps/misc
 COPY ./tables_readonly.sql ./tables_readonly.sql
 RUN /etc/init.d/postgresql restart && psql -U postgres -f ./tables_readonly.sql jibiki && /etc/init.d/postgresql stop
+
+RUN apt-get remove -y postgresql-server-dev-11 libmecab-dev curl python3-venv python3-pip default-jre git maven expect
 
 USER postgres
 CMD ["/usr/lib/postgresql/11/bin/postgres", "-D", "/var/lib/postgresql/11/main", "-c", "config_file=/etc/postgresql/11/main/postgresql.conf"]
