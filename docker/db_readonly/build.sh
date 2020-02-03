@@ -52,5 +52,5 @@ echo "listen_addresses='*'" >> /etc/postgresql/12/main/postgresql.conf
 psql -U postgres -f /var/jibiki_deps/scripts/tables_readonly.sql jibiki
 
 apt-get remove -y postgresql-server-dev-12 libmecab-dev curl python3-venv python3-pip default-jre git maven expect python3-setuptools python3-dev
-rm -rf /var/jibiki_dep
+rm -rf /var/jibiki_deps
 /etc/init.d/postgresql stop
