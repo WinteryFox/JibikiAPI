@@ -2,7 +2,7 @@ set -x
 
 sed -i'' 's/archive.ubuntu.com/us.archive.ubuntu.com/' /etc/apt/sources.list
 apt-get update
-apt-get install --no-install-recommends -y build-essential wget postgresql-server-dev-12 libmecab-dev postgresql-12 curl python3-venv python3-pip default-jre git maven expect mecab-jumandic mecab-jumandic-utf8 mecab-utils python3-setuptools python3-dev
+apt-get install --no-install-recommends -y tar build-essential wget postgresql-server-dev-12 libmecab-dev postgresql-12 curl python3-venv python3-pip default-jre git maven expect mecab-jumandic mecab-jumandic-utf8 mecab-utils python3-setuptools python3-dev
 rm -rf /var/lib/apt/lists/*
 
 sed -i 's/peer/trust/g' /etc/postgresql/12/main/pg_hba.conf
@@ -13,7 +13,6 @@ git clone https://gitlab.com/yamagoya/jmdictdb/
 git clone https://github.com/oknj/textsearch_ja.git
 git clone https://github.com/WinteryFox/JibikiJLPTClassifier.git
 git clone https://github.com/WinteryFox/KanjidicParser.git
-git clone https://github.com/WinteryFox/TatoebaPostgreSQL.git
 
 cd /var/jibiki_deps/jmdictdb
 /etc/init.d/postgresql restart
@@ -28,12 +27,13 @@ cd /var/jibiki_deps/textsearch_ja
 make
 make install
 
-cd /var/jibiki_deps/TatoebaPostgreSQL
-mvn package
-cd /var/jibiki_deps/TatoebaPostgreSQL/target
-cp /var/jibiki_deps/scripts/tatoeba.exp .
-chmod +x ./tatoeba.exp
-./tatoeba.exp
+cd /var/jibiki_deps
+wget http://downloads.tatoeba.org/exports/sentences.tar.bz2 && tar xvfj sentences.tar.bz2
+wget http://downloads.tatoeba.org/exports/links.tar.bz2 && tar xvfj links.tar.bz2
+wget http://downloads.tatoeba.org/exports/tags.tar.bz2 && tar xvfj tags.tar.bz2
+wget http://downloads.tatoeba.org/exports/sentences_with_audio.tar.bz2 && tar xvfj sentences_with_audio.tar.bz2
+psql -U postgres -d jibiki -c "CREATE TABLE sentences(id INTEGER PRIMARY KEY, language TEXT NOT NULL, sentence TEXT NOT NULL)"
+psql -U postgres -d jibiki -c "\copy sentences FROM '/var/jibiki_deps/sentences.csv' (FORMAT CSV, DELIMITER E'\t', QUOTE '')"
 
 cd /var/jibiki_deps/KanjidicParser
 curl -L https://github.com/WinteryFox/KanjidicParser/releases/download/1.0.0/kanjidicparser.jar --output kanjidicparser.jar
