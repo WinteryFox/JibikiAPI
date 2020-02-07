@@ -3,7 +3,6 @@ FROM ubuntu:20.04 as DbBuilder
 ENV DEBIAN_FRONTEND=noninteractive
 
 COPY ./build.sh /var/jibiki_deps/scripts/
-COPY ./tatoeba.exp /var/jibiki_deps/scripts/
 COPY ./jlptclassifier.exp /var/jibiki_deps/scripts/
 COPY ./tables_readonly.sql /var/jibiki_deps/scripts/
 

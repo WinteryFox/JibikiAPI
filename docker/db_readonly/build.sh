@@ -1,6 +1,5 @@
 set -x
 
-sed -i'' 's/archive.ubuntu.com/us.archive.ubuntu.com/' /etc/apt/sources.list
 apt-get update
 apt-get install --no-install-recommends -y tar build-essential wget postgresql-server-dev-12 libmecab-dev postgresql-12 curl python3-venv python3-pip default-jre git maven expect mecab-jumandic mecab-jumandic-utf8 mecab-utils python3-setuptools python3-dev
 rm -rf /var/lib/apt/lists/*
@@ -8,7 +7,7 @@ rm -rf /var/lib/apt/lists/*
 sed -i 's/peer/trust/g' /etc/postgresql/12/main/pg_hba.conf
 sed -i 's/md5/trust/g' /etc/postgresql/12/main/pg_hba.conf
 
-#cd /var/jibiki_deps
+cd /var/jibiki_deps || return 1
 #git clone https://gitlab.com/yamagoya/jmdictdb/
 git clone https://github.com/oknj/textsearch_ja.git
 #git clone https://github.com/WinteryFox/JibikiJLPTClassifier.git
@@ -23,7 +22,7 @@ git clone https://github.com/oknj/textsearch_ja.git
 #make loadall
 #make activate DBACT=jibiki
 #
-cd /var/jibiki_deps/textsearch_ja
+cd /var/jibiki_deps/textsearch_ja || return 1
 make
 make install
 #
@@ -49,7 +48,7 @@ make install
 echo "host all  all    0.0.0.0/0  trust" >> /etc/postgresql/12/main/pg_hba.conf
 echo "listen_addresses='*'" >> /etc/postgresql/12/main/postgresql.conf
 
-cd /var/jibiki_deps
+cd /var/jibiki_deps || return 1
 wget http://downloads.tatoeba.org/exports/sentences.tar.bz2 && tar xvfj sentences.tar.bz2
 wget http://downloads.tatoeba.org/exports/links.tar.bz2 && tar xvfj links.tar.bz2
 wget http://downloads.tatoeba.org/exports/tags.tar.bz2 && tar xvfj tags.tar.bz2
@@ -59,9 +58,19 @@ wget http://downloads.tatoeba.org/exports/sentences_with_audio.tar.bz2 && tar xv
 psql -U postgres -d postgres -c "CREATE DATABASE jibiki;"
 psql -U postgres -d jibiki \
 -c "CREATE EXTENSION textsearch_ja;" \
--c "CREATE TEMPORARY TABLE t(id INTEGER, language TEXT, sentence TEXT NOT NULL);" \
--c "\copy t FROM '/var/jibiki_deps/sentences.csv' (FORMAT CSV, DELIMITER E'\t');" \
--c "CREATE TABLE sentences AS (SELECT id, language, sentence, CASE WHEN language = 'eng' THEN to_tsvector('english', sentence) ELSE to_tsvector('japanese', sentence) END tsv FROM t WHERE language IN ('eng', 'jpn'));"
+-c "CREATE TEMPORARY TABLE t (id INTEGER, language TEXT, sentence TEXT NOT NULL);" \
+-c "\copy t FROM '/var/jibiki_deps/sentences.csv';" \
+-c "CREATE TABLE sentences AS (SELECT id, language, sentence, CASE WHEN language = 'eng' THEN to_tsvector('english', sentence) ELSE to_tsvector('japanese', sentence) END tsv FROM t WHERE language IN ('eng', 'jpn'));" \
+-c "ALTER TABLE sentences ADD PRIMARY KEY (id);" \
+-c "ALTER TABLE sentences ALTER COLUMN language SET NOT NULL;" \
+-c "CREATE TEMPORARY TABLE l(source INTEGER, translation INTEGER);" \
+-c "\copy l FROM '/var/jibiki_deps/links.csv';" \
+-c "CREATE TABLE links AS (SELECT source, translation FROM l WHERE EXISTS (SELECT * FROM sentences WHERE id IN (source, translation) LIMIT 1));" \
+-c "ALTER TABLE links ADD PRIMARY KEY (source, translation);" \
+-c "ALTER TABLE links ADD FOREIGN KEY (source) REFERENCES sentences(id);" \
+-c "ALTER TABLE links ADD FOREIGN KEY (translation) REFERENCES sentences(id);" \
+-c "" \
+|| return 1
 #psql -U postgres -f /var/jibiki_deps/scripts/tables_readonly.sql jibiki
 
 apt-get remove -y postgresql-server-dev-12 libmecab-dev curl python3-venv python3-pip default-jre git maven expect python3-setuptools python3-dev
