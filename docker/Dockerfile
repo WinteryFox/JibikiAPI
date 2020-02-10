@@ -1,13 +1,12 @@
-### Grab postgres image ###
-FROM postgres
+FROM ubuntu:20.04 as DbBuilder
 
-### Environment variables ###
-ARG user=postgres
-ARG database=jibiki
-ARG password=12345
-ENV POSTGRES_USER ${user}
-ENV POSTGRES_DB ${database}
-ENV POSTGRES_PASSWORD ${password}
+ENV DEBIAN_FRONTEND=noninteractive
 
-### Import dump ###
-COPY dump.sql /docker-entrypoint-initdb.d/
+COPY ./build.sh /var/jibiki_deps/scripts/
+COPY ./tables_readonly.sql /var/jibiki_deps/scripts/
+
+RUN sh /var/jibiki_deps/scripts/build.sh
+
+USER postgres
+CMD ["/usr/lib/postgresql/12/bin/postgres", "-D", "/var/lib/postgresql/12/main", "-c", "config_file=/etc/postgresql/12/main/postgresql.conf"]
+
