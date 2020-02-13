@@ -76,23 +76,27 @@ FROM mv_words
 
     fun getKanji(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(json), '[]'::jsonb) json
-FROM mv_kanji
-WHERE (json ->> 'id')::integer = ANY (SELECT character
-                                      FROM meaning
-                                      WHERE lower(meaning) = lower(:query)
-                                      UNION
-                                      SELECT character
-                                      FROM reading
-                                      WHERE reading IN (hiragana(:japanese),
-                                                        katakana(:japanese))
-                                         OR REPLACE(reading, '.', '') IN (hiragana(:japanese),
-                                                                          katakana(:japanese))
-                                      UNION
-                                      SELECT id
-                                      FROM character
-                                      WHERE literal = ANY(regexp_split_to_array(:query, ''))
-                                         OR id::text = ANY (regexp_split_to_array(:query, ',')))
+WITH entries AS (
+    SELECT character
+    FROM meaning
+    WHERE lower(meaning) = lower(: query)
+    UNION
+    SELECT character
+    FROM reading
+    WHERE reading IN (hiragana(:japanese),
+                      katakana(:japanese))
+       OR REPLACE(reading, '.', '') IN (hiragana(:japanese),
+                                        katakana(:japanese))
+    UNION
+    SELECT literal
+    FROM character
+    WHERE literal = ANY (regexp_split_to_array(: query, ''))
+       OR literal = ANY (regexp_split_to_array(: query, ','))
+)
+SELECT coalesce(jsonb_agg(v_kanji.json), '[]'::jsonb)
+FROM entries
+         JOIN v_kanji
+              ON v_kanji.literal = entries.character
 LIMIT :pageSize
 OFFSET
 :page * :pageSize

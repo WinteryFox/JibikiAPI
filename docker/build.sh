@@ -29,8 +29,9 @@ make
 make install
 
 cd /var/jibiki_deps/KanjidicParser || return 1
-curl -L https://github.com/WinteryFox/KanjidicParser/releases/download/1.0.0/kanjidicparser.jar --output kanjidicparser.jar
-java -jar ./kanjidicparser.jar localhost jibiki postgres postgres
+mvn package
+cd target || return 1
+java -jar ./kanjidicparser-1.0-SNAPSHOT-jar-with-dependencies.jar localhost jibiki postgres postgres
 
 echo "host all  all    0.0.0.0/0  trust" >>/etc/postgresql/12/main/pg_hba.conf
 echo "listen_addresses='*'" >>/etc/postgresql/12/main/postgresql.conf

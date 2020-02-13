@@ -1,68 +1,45 @@
-
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-DROP INDEX IF EXISTS trgm_gloss_index;
-CREATE INDEX trgm_gloss_index ON gloss USING GIN (txt gin_trgm_ops);
+CREATE INDEX meaning_meaning_index ON meaning (meaning);
+CREATE INDEX reading_reading_index ON reading (reading);
 
-DROP INDEX IF EXISTS trgm_kanji_index;
-CREATE INDEX trgm_kanji_index ON kanj USING GIN (txt gin_trgm_ops);
-
-DROP INDEX IF EXISTS trgm_reading_index;
-CREATE INDEX trgm_reading_index ON rdng USING GIN (txt gin_trgm_ops);
-
-DROP INDEX IF EXISTS trgm_gloss_index;
-CREATE INDEX trgm_gloss_index ON gloss (regexp_replace(lower(txt), '\s\(.*\)', ''));
-
-DROP INDEX IF EXISTS gloss_index;
-CREATE INDEX gloss_index ON gloss (entr, sens, txt);
-
-DROP INDEX IF EXISTS sentences_id_cast_index;
-CREATE INDEX sentences_id_cast_index ON sentences (CAST(id AS TEXT));
-
-DROP INDEX IF EXISTS reading_reading_stripped_index;
-CREATE INDEX reading_reading_stripped_index ON reading (REPLACE(reading, '.', ''));
-
-DROP INDEX IF EXISTS reading_entr_cast_index;
-CREATE INDEX reading_entr_cast_index ON rdng (CAST(entr AS TEXT));
-
-DROP MATERIALIZED VIEW IF EXISTS mv_kanji;
-CREATE MATERIALIZED VIEW mv_kanji AS
-SELECT jsonb_build_object(
-               'id', character.id,
+CREATE VIEW v_kanji AS
+SELECT character.literal,
+       jsonb_build_object(
                'literal', character.literal,
-               'definitions', meaning.json,
+               'definitions',
+               coalesce(meaning.json, '[]'::jsonb),
                'readings', jsonb_build_object(
-                       'onyomi', coalesce(readings.onyomi, '[]'::jsonb),
-                       'kunyomi', coalesce(readings.kunyomi, '[]'::jsonb)
+                       'onyomi', coalesce(reading.onyomi, '[]'::jsonb),
+                       'kunyomi', coalesce(reading.kunyomi, '[]'::jsonb)
                    ),
                'miscellaneous', jsonb_build_object(
-                       'grade', misc.grade,
-                       'stroke_count', misc.stroke_count,
-                       'frequency', misc.frequency,
-                       'variant_type', misc.variant_type,
-                       'variant', misc.variant,
-                       'jlpt', misc.jlpt,
-                       'radical_name', misc.radical_name
+                       'grade', miscellaneous.grade,
+                       'stroke_count', miscellaneous.stroke_count,
+                       'frequency', miscellaneous.frequency,
+                       'variant_type', miscellaneous.variant_type,
+                       'variant', miscellaneous.variant,
+                       'jlpt', miscellaneous.jlpt,
+                       'radical_name', miscellaneous.radical_name
                    )
            ) json
 FROM character
-         LEFT JOIN (SELECT character,
-                           jsonb_agg(meaning) json
-                    FROM meaning
-                    WHERE language = 'en'
-                    GROUP BY character) meaning
-                   ON meaning.character = character.id
-         LEFT JOIN miscellaneous misc on character.id = misc.character
-         LEFT JOIN (SELECT character,
-                           jsonb_agg(reading) FILTER (WHERE type = 'ja_on')  onyomi,
-                           jsonb_agg(reading) FILTER (WHERE type = 'ja_kun') kunyomi
-                    FROM reading
-                    GROUP BY character) readings
-                   ON readings.character = character.id;
-VACUUM ANALYZE mv_kanji;
-CREATE INDEX mv_kanji_literal_index ON mv_kanji ((json ->> 'literal'));
+         LEFT JOIN miscellaneous
+                   ON miscellaneous.character = character.literal
+         JOIN LATERAL (SELECT reading.character,
+                              jsonb_agg(reading.reading) FILTER (WHERE type = 'ja_on')  onyomi,
+                              jsonb_agg(reading.reading) FILTER (WHERE type = 'ja_kun') kunyomi
+                       FROM reading
+                       WHERE reading.character = character.literal
+                       GROUP BY reading.character) reading
+              ON TRUE
+         JOIN LATERAL (SELECT character,
+                              jsonb_agg(meaning) json
+                       FROM meaning
+                       WHERE meaning.character = character.literal
+                       GROUP BY meaning.character) meaning
+              ON TRUE;
 
 DROP MATERIALIZED VIEW IF EXISTS mv_sentences CASCADE;
 CREATE MATERIALIZED VIEW mv_sentences AS
