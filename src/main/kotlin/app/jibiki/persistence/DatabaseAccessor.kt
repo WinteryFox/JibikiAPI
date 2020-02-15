@@ -19,13 +19,13 @@ class DatabaseAccessor {
         return client.execute("""
 SELECT coalesce(jsonb_agg(json.json), '[]'::jsonb) json
 FROM (SELECT jsonb_build_object(
-                     'word', mv_words.json,
+                     'word', v_words.json,
                      'kanji',
                      coalesce(jsonb_agg(DISTINCT kanji.json) FILTER (WHERE kanji.json IS NOT NULL), '[]'::jsonb),
                      'sentences',
                      coalesce(jsonb_agg(DISTINCT example.json) FILTER (WHERE example.json IS NOT NULL), '[]'::jsonb)
                  ) json
-      FROM mv_words
+      FROM v_words
                JOIN get_words(:query, :japanese, :page, :pageSize) words
                     ON (mv_words.json ->> 'id')::integer = words
                LEFT JOIN mv_kanji kanji
@@ -45,8 +45,8 @@ FROM (SELECT jsonb_build_object(
           ) s
                          ON TRUE
                LEFT JOIN mv_translated_sentences example
-                         ON (example.json ->> 'id')::integer = s
-      GROUP BY mv_words.json) json
+                         ON mv_translated_sentences.id = s
+      GROUP BY v_words.json) json
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)
@@ -60,10 +60,10 @@ FROM (SELECT jsonb_build_object(
 
     fun getWords(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(json), '[]'::jsonb) json
-FROM mv_words
+SELECT coalesce(jsonb_agg(v_word.json), '[]'::jsonb) json
+FROM v_words
          JOIN get_words(:query, :japanese, :page, :pageSize) words
-              ON (json ->> 'id')::integer = words
+              ON v_words.id = words.entry
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)
@@ -79,7 +79,7 @@ FROM mv_words
 WITH entries AS (
     SELECT character
     FROM meaning
-    WHERE lower(meaning) = lower(: query)
+    WHERE lower(meaning) = lower(:query)
     UNION
     SELECT character
     FROM reading
@@ -90,13 +90,13 @@ WITH entries AS (
     UNION
     SELECT literal
     FROM character
-    WHERE literal = ANY (regexp_split_to_array(: query, ''))
-       OR literal = ANY (regexp_split_to_array(: query, ','))
+    WHERE literal = ANY (regexp_split_to_array(:query, ''))
+       OR literal = ANY (regexp_split_to_array(:query, ','))
 )
-SELECT coalesce(jsonb_agg(v_kanji.json), '[]'::jsonb)
+SELECT coalesce(jsonb_agg(mv_kanji.json), '[]'::jsonb) json
 FROM entries
-         JOIN v_kanji
-              ON v_kanji.literal = entries.character
+         JOIN mv_kanji
+              ON mv_kanji.literal = entries.character
 LIMIT :pageSize
 OFFSET
 :page * :pageSize
@@ -112,14 +112,11 @@ OFFSET
 
     fun getSentences(query: String, page: Int, minLength: Int, maxLength: Int, source: String): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(DISTINCT json), '[]'::jsonb) json
-FROM links
+SELECT coalesce(jsonb_agg(mv_translated_sentences.json), '[]'::jsonb) json
+FROM mv_translated_sentences
          JOIN get_sentences(:query, :minLength, :maxLength, :page, :pageSize) entries
-              ON entries = links.source
-         JOIN mv_translated_sentences
-              ON (mv_translated_sentences.json ->> 'id')::integer IN
-                 (links.source, links.translation)
-                  AND mv_translated_sentences.json ->> 'language' = :source
+              ON mv_translated_sentences.id = entries.entry
+                  AND mv_translated_sentences.language = :source
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)

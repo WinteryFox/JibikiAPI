@@ -92,7 +92,7 @@ psql -U postgres -d jibiki \
   -c "UPDATE sentences SET has_audio = true WHERE EXISTS (SELECT * FROM a WHERE a.sentence = id);" \
   -c "ALTER TABLE sentences ALTER COLUMN has_audio SET NOT NULL;" ||
   return 1
-#psql -U postgres -f /var/jibiki_deps/scripts/tables_readonly.sql jibiki
+psql -U postgres -f /var/jibiki_deps/scripts/tables_readonly.sql jibiki
 
 apt-get remove -y postgresql-server-dev-12 libmecab-dev curl python3-venv python3-pip default-jre git maven expect python3-setuptools python3-dev
 rm -rf /var/jibiki_deps

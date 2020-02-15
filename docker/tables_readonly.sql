@@ -1,10 +1,10 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION pg_trgm;
 
-CREATE INDEX meaning_meaning_index ON meaning (meaning);
-CREATE INDEX reading_reading_index ON reading (reading);
+---------------
+---- KANJI ----
+---------------
 
-CREATE VIEW v_kanji AS
+CREATE MATERIALIZED VIEW mv_kanji AS
 SELECT character.literal,
        jsonb_build_object(
                'literal', character.literal,
@@ -35,57 +35,60 @@ FROM character
                        GROUP BY reading.character) reading
               ON TRUE
          JOIN LATERAL (SELECT character,
-                              jsonb_agg(meaning) json
+                              jsonb_agg(meaning) FILTER (WHERE language = 'en') json
                        FROM meaning
                        WHERE meaning.character = character.literal
                        GROUP BY meaning.character) meaning
               ON TRUE;
 
-DROP MATERIALIZED VIEW IF EXISTS mv_sentences CASCADE;
-CREATE MATERIALIZED VIEW mv_sentences AS
-SELECT jsonb_build_object(
+CREATE INDEX meaning_meaning_lower_index ON meaning (lower(meaning));
+CREATE INDEX reading_reading_index ON reading (reading);
+CREATE INDEX reading_reading_replace_index ON reading (REPLACE(reading, '.', ''));
+CREATE INDEX mv_kanji_literal_index ON mv_kanji (literal);
+
+-------------------
+---- SENTENCES ----
+-------------------
+
+CREATE VIEW v_sentences AS
+SELECT sentences.id,
+       sentences.language,
+       jsonb_build_object(
                'id', sentences.id,
-               'language', sentences.lang,
+               'language', sentences.language,
                'sentence', sentences.sentence,
                'audio_uri', CASE
-                                WHEN audio.sentence IS NOT NULL THEN
-                                                    'https://audio.tatoeba.org/sentences/' || sentences.lang || '/' ||
-                                                    sentences.id || '.mp3' END,
+                                WHEN sentences.has_audio IS NOT NULL THEN
+                                            'https://audio.tatoeba.org/sentences/' || sentences.language || '/' ||
+                                            sentences.id || '.mp3' END,
                'tags', coalesce(jsonb_agg(tags.tag) FILTER (WHERE tag != 'null'), '[]'::jsonb)
            ) json
 FROM sentences
-         LEFT JOIN audio on sentences.id = audio.sentence
-         LEFT JOIN tags on sentences.id = tags.sentence
-WHERE sentences.lang IN ('eng', 'jpn')
-GROUP BY sentences.id, audio.sentence;
-VACUUM ANALYZE mv_sentences;
+         LEFT JOIN tags
+                   ON sentences.id = tags.sentence
+GROUP BY sentences.id;
 
-DROP MATERIALIZED VIEW IF EXISTS mv_translated_sentences;
 CREATE MATERIALIZED VIEW mv_translated_sentences AS
-SELECT jsonb_insert(
+SELECT source.id,
+       source.language,
+       jsonb_insert(
                source.json,
                '{translations}'::text[],
                jsonb_agg(translations.json)
            ) json
 FROM links
-         JOIN mv_sentences source ON links.source = (source.json ->> 'id')::integer
-         JOIN mv_sentences translations ON links.translation = (translations.json ->> 'id')::integer AND
-                                           translations.json ->> 'language' != source.json ->> 'language'
-GROUP BY source.json;
-VACUUM ANALYZE mv_translated_sentences;
+         JOIN v_sentences source
+              ON links.source = source.id
+         JOIN v_sentences translations
+              ON links.translation = translations.id
+                  AND translations.language != source.language
+GROUP BY source.id, source.language, source.json;
 
-DROP INDEX IF EXISTS mv_translated_sentences_id_index;
-CREATE INDEX mv_translated_sentences_id_index ON mv_translated_sentences (((mv_translated_sentences.json ->> 'id')::integer));
+CREATE INDEX sentences_language ON sentences (language);
+CREATE INDEX sentences_tsv_index ON sentences USING gin (tsv);
+CREATE INDEX tags_sentence_index ON tags (sentence);
 
-DROP INDEX IF EXISTS mv_translated_sentences_language_index;
-CREATE INDEX mv_translated_sentences_language_index ON mv_translated_sentences ((mv_translated_sentences.json ->> 'language'));
-
-DROP INDEX IF EXISTS mv_translated_sentences_id_language_index;
-CREATE INDEX mv_translated_sentences_id_language_index ON mv_translated_sentences (((mv_translated_sentences.json ->> 'id')::integer),
-                                                                                   (mv_translated_sentences.json ->> 'language'));
-
-DROP FUNCTION IF EXISTS get_sentences;
-CREATE OR REPLACE FUNCTION get_sentences(query TEXT, minLength INT, maxLength INT, page INT, pageSize INT)
+CREATE FUNCTION get_sentences(query TEXT, minLength INT, maxLength INT, page INT, pageSize INT)
     RETURNS TABLE
             (
                 entry INTEGER
@@ -96,7 +99,6 @@ WITH entries AS (
     SELECT entries.id entry, tsv
     FROM sentences entries
     WHERE entries.tsv @@ plainto_tsquery('japanese', query)
-      AND (entries.lang IN ('eng', 'jpn'))
       AND length(entries.sentence) BETWEEN minLength AND maxLength
     UNION ALL
     SELECT entries.id entry, tsv
@@ -111,8 +113,11 @@ FROM entries
 ORDER BY ts_rank(tsv, plainto_tsquery('japanese', query)) DESC;
 $$ LANGUAGE SQL STABLE;
 
-DROP MATERIALIZED VIEW IF EXISTS mv_senses CASCADE;
-CREATE MATERIALIZED VIEW mv_senses AS
+---------------
+---- WORDS ----
+---------------
+
+CREATE VIEW mv_senses AS
 SELECT entr,
        jsonb_agg(
                jsonb_build_object(
@@ -123,7 +128,7 @@ SELECT entr,
                    )
            ) json
 FROM (SELECT gloss.entr                entr,
-             jsonb_agg(gloss.txt)       txt,
+             jsonb_agg(gloss.txt)      txt,
              min(pos.pos::text)::jsonb pos,
              min(fld.fld::text)::jsonb fld,
              misc.descr
@@ -151,11 +156,8 @@ FROM (SELECT gloss.entr                entr,
                          ON misc.entr = gloss.entr AND misc.sens = gloss.sens
       GROUP BY gloss.entr, gloss.sens, misc.descr) gloss
 GROUP BY entr;
-CREATE INDEX mv_senses_entr_index ON mv_senses (entr);
-VACUUM ANALYZE mv_senses;
 
-DROP MATERIALIZED VIEW IF EXISTS mv_forms;
-CREATE MATERIALIZED VIEW mv_forms AS
+CREATE VIEW mv_forms AS
 SELECT reading.entr,
        jsonb_agg(jsonb_build_object(
                'kanji', jsonb_build_object('literal', kanji.txt, 'info', kinf.descr),
@@ -173,13 +175,11 @@ FROM rdng reading
                              LEFT JOIN kwkinf ON kwkinf.id = kinf.kw) kinf
                    ON kinf.entr = reading.entr AND kinf.kanj = kanji.kanj
 GROUP BY reading.entr;
-CREATE UNIQUE INDEX ON mv_forms (entr);
-VACUUM ANALYZE mv_forms;
 
 ALTER TABLE entr
     ADD COLUMN IF NOT EXISTS score SMALLINT NOT NULL DEFAULT 0;
 
-CREATE OR REPLACE FUNCTION score_word() RETURNS TRIGGER AS
+CREATE FUNCTION score_word() RETURNS TRIGGER AS
 $$
 DECLARE
     f INTEGER;
@@ -210,7 +210,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS word_trigger ON entr;
 CREATE TRIGGER word_trigger
     BEFORE UPDATE OR INSERT
     ON entr
@@ -220,6 +219,9 @@ EXECUTE PROCEDURE score_word();
 UPDATE entr
 SET score = 0
 WHERE TRUE;
+
+DROP TRIGGER word_trigger ON entr;
+DROP FUNCTION score_word();
 
 CREATE OR REPLACE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
     RETURNS TABLE
@@ -251,9 +253,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP MATERIALIZED VIEW IF EXISTS mv_words;
-CREATE MATERIALIZED VIEW mv_words AS
-SELECT jsonb_build_object(
+CREATE VIEW v_words AS
+SELECT entry.id,
+       jsonb_build_object(
                'id', entry.id,
                'jlpt', entry.jlpt,
                'forms', forms.json,
@@ -265,5 +267,3 @@ FROM entr entry
          JOIN mv_senses senses
               ON senses.entr = entry.id
 WHERE src != 3;
-
-CREATE INDEX IF NOT EXISTS mv_words_id_index ON mv_words (((json ->> 'id')::integer));
