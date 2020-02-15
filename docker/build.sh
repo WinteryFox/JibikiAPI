@@ -3,7 +3,7 @@ set -x
 apt-get update
 apt-get install --no-install-recommends -y tar build-essential wget postgresql-server-dev-12 libmecab-dev \
   postgresql-12 curl python3-venv python3-pip default-jre git maven expect mecab-jumandic mecab-jumandic-utf8 \
-  mecab-utils python3-setuptools python3-dev ||
+  mecab-utils python3-setuptools python3-dev python3-wheel ||
   return 1
 rm -rf /var/lib/apt/lists/*
 
@@ -20,7 +20,7 @@ cd /var/jibiki_deps/jmdictdb || return 1
 make init
 python3 -m venv jmdictvenv
 /bin/bash -c "source jmdictvenv/bin/activate"
-python3 -m pip install -Iv psycopg2==2.7.3.2
+python3 -m pip install psycopg2
 make loadall
 make activate DBACT=jibiki
 
@@ -94,6 +94,6 @@ psql -U postgres -d jibiki \
   return 1
 psql -U postgres -f /var/jibiki_deps/scripts/tables_readonly.sql jibiki
 
-apt-get remove -y postgresql-server-dev-12 libmecab-dev curl python3-venv python3-pip default-jre git maven expect python3-setuptools python3-dev
+apt-get remove -y postgresql-server-dev-12 libmecab-dev curl python3-venv python3-pip default-jre git maven expect python3-setuptools python3-dev python3-wheel
 rm -rf /var/jibiki_deps
 /etc/init.d/postgresql stop
