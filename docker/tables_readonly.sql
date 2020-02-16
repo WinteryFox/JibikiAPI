@@ -1,3 +1,4 @@
+ALTER SYSTEM SET work_mem = '1GB';
 CREATE EXTENSION pg_trgm;
 
 ---------------
@@ -117,47 +118,47 @@ $$ LANGUAGE SQL STABLE;
 ---- WORDS ----
 ---------------
 
-CREATE VIEW mv_senses AS
-SELECT entr,
-       jsonb_agg(
-               jsonb_build_object(
-                       'definitions', gloss.txt,
-                       'part_of_speech', coalesce(pos, '[]'::jsonb),
-                       'field_of_use', coalesce(fld, '[]'::jsonb),
-                       'miscellaneous', coalesce(descr, '[]'::jsonb)
-                   )
-           ) json
-FROM (SELECT gloss.entr                entr,
-             jsonb_agg(gloss.txt)      txt,
-             min(pos.pos::text)::jsonb pos,
-             min(fld.fld::text)::jsonb fld,
-             misc.descr
-      FROM gloss
-               LEFT JOIN (SELECT pos.entr,
-                                 pos.sens,
-                                 jsonb_agg(
-                                         jsonb_build_object('short', kwpos.kw, 'long', kwpos.descr)) pos
-                          FROM pos
-                                   JOIN kwpos ON pos.kw = kwpos.id
-                          GROUP BY pos.entr, pos.sens) pos
-                         ON pos.entr = gloss.entr AND pos.sens = gloss.sens
-               LEFT JOIN (SELECT fld.entr,
-                                 fld.sens,
-                                 jsonb_agg(
-                                         jsonb_build_object('short', kwfld.kw, 'long', kwfld.descr)) fld
-                          FROM fld
-                                   JOIN kwfld ON fld.kw = kwfld.id
-                          GROUP BY fld.entr, fld.sens) fld
-                         ON fld.entr = gloss.entr AND fld.sens = gloss.sens
-               LEFT JOIN (SELECT misc.entr, misc.sens, jsonb_agg(kwmisc.descr) descr
-                          FROM misc
-                                   LEFT JOIN kwmisc ON misc.kw = kwmisc.id
-                          GROUP BY misc.entr, misc.sens) misc
-                         ON misc.entr = gloss.entr AND misc.sens = gloss.sens
-      GROUP BY gloss.entr, gloss.sens, misc.descr) gloss
-GROUP BY entr;
+CREATE VIEW v_senses AS
+SELECT jsonb_build_object(
+               'definitions', jsonb_agg(gloss.txt),
+               'part_of_speech', coalesce(pos.json, '[]'::jsonb),
+               'field_of_use', coalesce(fld.json, '[]'::jsonb),
+               'miscellaneous', coalesce(misc.json, '[]'::jsonb)
+           )
+FROM gloss
+         LEFT JOIN (SELECT pos.entr,
+                           pos.sens,
+                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
+                    FROM pos
+                             JOIN kwpos k
+                                  ON pos.kw = k.id
+                    GROUP BY entr,
+                             sens) pos
+                   ON pos.entr = gloss.entr
+                       AND pos.sens = gloss.sens
+         LEFT JOIN (SELECT fld.entr,
+                           fld.sens,
+                           jsonb_agg(jsonb_build_object('short', fld.kw, 'long', k.descr)) json
+                    FROM fld
+                             JOIN kwfld k
+                                  ON fld.kw = k.id
+                    GROUP BY entr,
+                             sens) fld
+                   ON fld.entr = gloss.entr
+                       AND fld.sens = gloss.sens
+         LEFT JOIN (SELECT entr,
+                           sens,
+                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
+                    FROM misc
+                             JOIN kwmisc k
+                                  ON misc.kw = k.id
+                    GROUP BY entr,
+                             sens) misc
+                   ON misc.entr = gloss.entr
+                       AND misc.sens = gloss.sens
+GROUP BY gloss.entr, gloss.sens, pos.json, fld.json, misc.json;
 
-CREATE VIEW mv_forms AS
+CREATE VIEW v_forms AS
 SELECT reading.entr,
        jsonb_agg(jsonb_build_object(
                'kanji', jsonb_build_object('literal', kanji.txt, 'info', kinf.descr),
@@ -223,35 +224,41 @@ WHERE TRUE;
 DROP TRIGGER word_trigger ON entr;
 DROP FUNCTION score_word();
 
-CREATE OR REPLACE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
+CREATE INDEX entr_id_cast_index ON entr (cast(id AS text));
+CREATE INDEX rdng_txt_index ON rdng (txt);
+CREATE INDEX gloss_replace_index ON gloss (regexp_replace(lower(txt), 'to\s|\s\(.*\)', ''));
+
+CREATE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
     RETURNS TABLE
             (
                 entry INTEGER
             )
 AS
 $$
-BEGIN
-    RETURN QUERY SELECT id
-                 FROM entr
-                 WHERE id IN (SELECT entr
-                              FROM gloss
-                              WHERE regexp_replace(lower(txt), '\s\(.*\)', '') = lower(query)
-                              UNION
-                              SELECT entr
-                              FROM kanj
-                              WHERE txt % query
-                              UNION
-                              SELECT entr
-                              FROM rdng
-                              WHERE txt IN (hiragana(japanese),
-                                            katakana(japanese))
-                                 OR entr::text = ANY (regexp_split_to_array(query, ','))
-                              LIMIT pageSize
-                              OFFSET
-                              page * pageSize)
-                 ORDER BY score DESC;
-END;
-$$ LANGUAGE plpgsql;
+SELECT id
+FROM entr
+         JOIN (SELECT entr
+               FROM gloss
+               WHERE regexp_replace(lower(txt), 'to\s|\s\(.*\)', '') = lower(query)
+               UNION
+               SELECT entr
+               FROM kanj
+               WHERE txt = query
+               UNION
+               SELECT entr
+               FROM rdng
+               WHERE txt IN (hiragana(japanese),
+                             katakana(japanese))
+               UNION
+               SELECT entr.id entr
+               FROM entr
+               WHERE entr.id::text = ANY (regexp_split_to_array(query, ','))
+               LIMIT pageSize
+               OFFSET
+               page * pageSize) entries
+              ON entr.id = entries.entr
+ORDER BY score DESC;
+$$ LANGUAGE SQL STABLE;
 
 CREATE VIEW v_words AS
 SELECT entry.id,
