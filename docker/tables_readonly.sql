@@ -118,46 +118,6 @@ $$ LANGUAGE SQL STABLE;
 ---- WORDS ----
 ---------------
 
-CREATE VIEW v_senses AS
-SELECT jsonb_build_object(
-               'definitions', jsonb_agg(gloss.txt),
-               'part_of_speech', coalesce(pos.json, '[]'::jsonb),
-               'field_of_use', coalesce(fld.json, '[]'::jsonb),
-               'miscellaneous', coalesce(misc.json, '[]'::jsonb)
-           )
-FROM gloss
-         LEFT JOIN (SELECT pos.entr,
-                           pos.sens,
-                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
-                    FROM pos
-                             JOIN kwpos k
-                                  ON pos.kw = k.id
-                    GROUP BY entr,
-                             sens) pos
-                   ON pos.entr = gloss.entr
-                       AND pos.sens = gloss.sens
-         LEFT JOIN (SELECT fld.entr,
-                           fld.sens,
-                           jsonb_agg(jsonb_build_object('short', fld.kw, 'long', k.descr)) json
-                    FROM fld
-                             JOIN kwfld k
-                                  ON fld.kw = k.id
-                    GROUP BY entr,
-                             sens) fld
-                   ON fld.entr = gloss.entr
-                       AND fld.sens = gloss.sens
-         LEFT JOIN (SELECT entr,
-                           sens,
-                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
-                    FROM misc
-                             JOIN kwmisc k
-                                  ON misc.kw = k.id
-                    GROUP BY entr,
-                             sens) misc
-                   ON misc.entr = gloss.entr
-                       AND misc.sens = gloss.sens
-GROUP BY gloss.entr, gloss.sens, pos.json, fld.json, misc.json;
-
 CREATE VIEW v_forms AS
 SELECT reading.entr,
        jsonb_agg(jsonb_build_object(
@@ -227,6 +187,7 @@ DROP FUNCTION score_word();
 CREATE INDEX entr_id_cast_index ON entr (cast(id AS text));
 CREATE INDEX rdng_txt_index ON rdng (txt);
 CREATE INDEX gloss_replace_index ON gloss (regexp_replace(lower(txt), 'to\s|\s\(.*\)', ''));
+CREATE INDEX gloss_lower_index ON gloss (lower(txt));
 
 CREATE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
     RETURNS TABLE
@@ -239,38 +200,81 @@ SELECT id
 FROM entr
          JOIN (SELECT entr
                FROM gloss
-               WHERE regexp_replace(lower(txt), 'to\s|\s\(.*\)', '') = lower(query)
+               WHERE txt = :query
+               UNION
+               SELECT entr
+               FROM gloss
+               WHERE txt ILIKE '%' || :query || '%'
                UNION
                SELECT entr
                FROM kanj
-               WHERE txt = query
+               WHERE txt = :query
                UNION
                SELECT entr
                FROM rdng
-               WHERE txt IN (hiragana(japanese),
-                             katakana(japanese))
+               WHERE txt IN (hiragana(:japanese),
+                             katakana(:japanese))
                UNION
                SELECT entr.id entr
                FROM entr
-               WHERE entr.id::text = ANY (regexp_split_to_array(query, ','))
-               LIMIT pageSize
+               WHERE entr.id::text = ANY (regexp_split_to_array(:query, ','))
+               LIMIT :pageSize
                OFFSET
-               page * pageSize) entries
+               :page * :pageSize) entries
               ON entr.id = entries.entr
 ORDER BY score DESC;
 $$ LANGUAGE SQL STABLE;
 
-CREATE VIEW v_words AS
-SELECT entry.id,
+CREATE VIEW v_senses AS
+SELECT gloss.entr,
+       gloss.sens,
        jsonb_build_object(
-               'id', entry.id,
-               'jlpt', entry.jlpt,
-               'forms', forms.json,
-               'senses', senses.json
+               'definitions', jsonb_agg(gloss.txt),
+               'part_of_speech', coalesce(pos.json, '[]'::jsonb),
+               'field_of_use', coalesce(fld.json, '[]'::jsonb),
+               'miscellaneous', coalesce(misc.json, '[]'::jsonb)
            ) json
-FROM entr entry
-         JOIN mv_forms forms
-              ON forms.entr = entry.id
-         JOIN mv_senses senses
-              ON senses.entr = entry.id
-WHERE src != 3;
+FROM gloss
+         LEFT JOIN (SELECT pos.entr,
+                           pos.sens,
+                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
+                    FROM pos
+                             JOIN kwpos k
+                                  ON pos.kw = k.id
+                    GROUP BY entr,
+                             sens) pos
+                   ON pos.entr = gloss.entr
+                       AND pos.sens = gloss.sens
+         LEFT JOIN (SELECT fld.entr,
+                           fld.sens,
+                           jsonb_agg(jsonb_build_object('short', fld.kw, 'long', k.descr)) json
+                    FROM fld
+                             JOIN kwfld k
+                                  ON fld.kw = k.id
+                    GROUP BY entr,
+                             sens) fld
+                   ON fld.entr = gloss.entr
+                       AND fld.sens = gloss.sens
+         LEFT JOIN (SELECT entr,
+                           sens,
+                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
+                    FROM misc
+                             JOIN kwmisc k
+                                  ON misc.kw = k.id
+                    GROUP BY entr,
+                             sens) misc
+                   ON misc.entr = gloss.entr
+                       AND misc.sens = gloss.sens
+GROUP BY gloss.entr, gloss.sens, pos.json, fld.json, misc.json;
+
+CREATE VIEW v_words AS
+SELECT entr.id,
+       jsonb_build_object(
+               'id', entr.id,
+               'jlpt', entr.jlpt,
+               'senses', jsonb_agg(v_senses.json)
+           ) json
+FROM entr
+         JOIN v_senses
+              ON v_senses.entr = entr.id
+GROUP BY entr.id;
