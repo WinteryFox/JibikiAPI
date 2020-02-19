@@ -1,5 +1,6 @@
 package app.jibiki.persistence
 
+import com.fasterxml.jackson.databind.json.JsonMapper
 import com.moji4j.MojiConverter
 import io.r2dbc.postgresql.codec.Json
 import org.springframework.beans.factory.annotation.Autowired
@@ -60,10 +61,8 @@ FROM (SELECT jsonb_build_object(
 
     fun getWords(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(v_word.json), '[]'::jsonb) json
-FROM v_words
-         JOIN get_words(:query, :japanese, :page, :pageSize) words
-              ON v_words.id = words.entry
+SELECT coalesce(jsonb_agg(words.json), '[]'::jsonb) json
+FROM get_words(:query, :japanese, :page, :pageSize) words
         """)
                 .bind("pageSize", pageSize)
                 .bind("page", page)

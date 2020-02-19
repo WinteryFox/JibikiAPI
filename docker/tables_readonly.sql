@@ -118,25 +118,6 @@ $$ LANGUAGE SQL STABLE;
 ---- WORDS ----
 ---------------
 
-CREATE VIEW v_forms AS
-SELECT reading.entr,
-       jsonb_agg(jsonb_build_object(
-               'kanji', jsonb_build_object('literal', kanji.txt, 'info', kinf.descr),
-               'reading', jsonb_build_object('literal', reading.txt, 'info', rinf.descr)
-           )) json
-FROM rdng reading
-         LEFT JOIN (SELECT kwrinf.descr, rinf.entr, rinf.rdng
-                    FROM rinf
-                             LEFT JOIN kwrinf ON kwrinf.id = rinf.kw) rinf
-                   ON rinf.entr = reading.entr AND rinf.rdng = reading.rdng
-         LEFT JOIN kanj kanji
-                   ON kanji.entr = reading.entr AND kanji.kanj = reading.rdng
-         LEFT JOIN (SELECT kwkinf.descr, kinf.entr, kinf.kanj
-                    FROM kinf
-                             LEFT JOIN kwkinf ON kwkinf.id = kinf.kw) kinf
-                   ON kinf.entr = reading.entr AND kinf.kanj = kanji.kanj
-GROUP BY reading.entr;
-
 ALTER TABLE entr
     ADD COLUMN IF NOT EXISTS score SMALLINT NOT NULL DEFAULT 0;
 
@@ -189,92 +170,155 @@ CREATE INDEX rdng_txt_index ON rdng (txt);
 CREATE INDEX gloss_replace_index ON gloss (regexp_replace(lower(txt), 'to\s|\s\(.*\)', ''));
 CREATE INDEX gloss_lower_index ON gloss (lower(txt));
 
-CREATE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
-    RETURNS TABLE
-            (
-                entry INTEGER
-            )
+CREATE FUNCTION search_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
+    RETURNS SETOF INTEGER
 AS
 $$
 SELECT id
 FROM entr
          JOIN (SELECT entr
                FROM gloss
-               WHERE txt = :query
-               UNION
-               SELECT entr
-               FROM gloss
-               WHERE txt ILIKE '%' || :query || '%'
+               WHERE txt = query
                UNION
                SELECT entr
                FROM kanj
-               WHERE txt = :query
+               WHERE txt = query
                UNION
                SELECT entr
                FROM rdng
-               WHERE txt IN (hiragana(:japanese),
-                             katakana(:japanese))
+               WHERE txt IN (hiragana(japanese),
+                             katakana(japanese))
                UNION
                SELECT entr.id entr
                FROM entr
-               WHERE entr.id::text = ANY (regexp_split_to_array(:query, ','))
-               LIMIT :pageSize
+               WHERE entr.id::text = ANY (regexp_split_to_array(query, ','))
+               LIMIT pageSize
                OFFSET
-               :page * :pageSize) entries
+               page * pageSize) entries
               ON entr.id = entries.entr
 ORDER BY score DESC;
 $$ LANGUAGE SQL STABLE;
 
 CREATE VIEW v_senses AS
-SELECT gloss.entr,
-       gloss.sens,
-       jsonb_build_object(
-               'definitions', jsonb_agg(gloss.txt),
-               'part_of_speech', coalesce(pos.json, '[]'::jsonb),
-               'field_of_use', coalesce(fld.json, '[]'::jsonb),
-               'miscellaneous', coalesce(misc.json, '[]'::jsonb)
-           ) json
+SELECT gloss.entr   id,
+       gloss.sens   ordinal,
+       gloss.txt    definition,
+       kwpos.kw     pos,
+       kwpos.descr  pos_info,
+       kwfld.kw     fld,
+       kwfld.descr  fld_info,
+       kwmisc.descr misc
 FROM gloss
-         LEFT JOIN (SELECT pos.entr,
-                           pos.sens,
-                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
-                    FROM pos
-                             JOIN kwpos k
-                                  ON pos.kw = k.id
-                    GROUP BY entr,
-                             sens) pos
+         LEFT JOIN pos
                    ON pos.entr = gloss.entr
                        AND pos.sens = gloss.sens
-         LEFT JOIN (SELECT fld.entr,
-                           fld.sens,
-                           jsonb_agg(jsonb_build_object('short', fld.kw, 'long', k.descr)) json
-                    FROM fld
-                             JOIN kwfld k
-                                  ON fld.kw = k.id
-                    GROUP BY entr,
-                             sens) fld
+         LEFT JOIN kwpos
+                   ON pos.kw = kwpos.id
+         LEFT JOIN fld
                    ON fld.entr = gloss.entr
                        AND fld.sens = gloss.sens
-         LEFT JOIN (SELECT entr,
-                           sens,
-                           jsonb_agg(jsonb_build_object('short', k.kw, 'long', k.descr)) json
-                    FROM misc
-                             JOIN kwmisc k
-                                  ON misc.kw = k.id
-                    GROUP BY entr,
-                             sens) misc
+         LEFT JOIN kwfld
+                   ON fld.kw = kwfld.id
+         LEFT JOIN misc
                    ON misc.entr = gloss.entr
                        AND misc.sens = gloss.sens
-GROUP BY gloss.entr, gloss.sens, pos.json, fld.json, misc.json;
+         LEFT JOIN kwmisc
+                   ON misc.kw = kwmisc.id;
 
-CREATE VIEW v_words AS
-SELECT entr.id,
-       jsonb_build_object(
-               'id', entr.id,
-               'jlpt', entr.jlpt,
-               'senses', jsonb_agg(v_senses.json)
+CREATE VIEW v_forms AS
+SELECT rdng.entr    id,
+       rdng.rdng    ordinal,
+       rdng.txt     reading,
+       kwrinf.descr reading_info,
+       kanj.txt     kanji,
+       kwkinf.descr kanji_info
+FROM rdng
+         LEFT JOIN rinf
+                   ON rdng.entr = rinf.entr
+                       AND rdng.rdng = rinf.rdng
+         LEFT JOIN kwrinf
+                   ON rinf.kw = kwrinf.id
+         LEFT JOIN kanj
+                   ON rdng.entr = kanj.entr
+                       AND rdng.rdng = kanj.kanj
+         LEFT JOIN kinf
+                   ON kanj.entr = kinf.entr
+                       AND kanj.kanj = kinf.kanj
+         LEFT JOIN kwkinf
+                   ON kinf.kw = kwkinf.id;
+
+CREATE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
+    RETURNS SETOF JSONB
+AS
+$$
+WITH entries AS (
+    SELECT search_words(query, japanese, page, pageSize) entries
+),
+     forms AS (
+         SELECT form.id,
+                form.ordinal,
+                jsonb_build_object(
+                        'ordinal', form.ordinal,
+                        'kanji',
+                        jsonb_build_object(
+                                'literal', form.kanji,
+                                'info', form.kanji_info
+                            ),
+                        'reading',
+                        jsonb_build_object(
+                                'literal', form.reading,
+                                'info', form.reading_info
+                            )
+                    ) json
+         FROM v_forms form
+                  JOIN entries
+                       ON form.id = entries
+     ),
+     senses AS (
+         SELECT sens.id,
+                sens.ordinal,
+                jsonb_build_object(
+                        'ordinal', sens.ordinal,
+                        'definitions', jsonb_agg(DISTINCT sens.definition),
+                        'field_of_use',
+                        coalesce(
+                                        jsonb_agg(
+                                        DISTINCT
+                                        jsonb_build_object(
+                                                'short', sens.fld,
+                                                'long', sens.fld_info
+                                            )
+                                    ) FILTER (WHERE sens.fld IS NOT NULL), '[]'::jsonb
+                            ),
+                        'part_of_speech',
+                        coalesce(
+                                        jsonb_agg(
+                                        DISTINCT
+                                        jsonb_build_object(
+                                                'short', sens.pos,
+                                                'long', sens.pos_info
+                                            )
+                                    ) FILTER (WHERE sens.pos IS NOT NULL), '[]'::jsonb
+                            )
+                    ) json
+         FROM v_senses sens
+                  JOIN entries
+                       ON sens.id = entries
+         GROUP BY sens.id, sens.ordinal
+     )
+SELECT jsonb_build_object(
+               'id', entry.id,
+               'seq', entry.seq,
+               'jlpt', entry.jlpt,
+               'forms', jsonb_agg(DISTINCT forms.json),
+               'senses', jsonb_agg(senses.json)
            ) json
-FROM entr
-         JOIN v_senses
-              ON v_senses.entr = entr.id
-GROUP BY entr.id;
+FROM entr entry
+         JOIN search_words(query, japanese, page, pageSize)
+              ON entry.id = search_words
+         JOIN forms
+              ON forms.id = entry.id
+         JOIN senses
+              ON senses.id = entry.id
+GROUP BY entry.id;
+$$ LANGUAGE SQL STABLE;
