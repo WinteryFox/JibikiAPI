@@ -39,11 +39,11 @@ echo "listen_addresses='*'" >>/etc/postgresql/12/main/postgresql.conf
 /etc/init.d/postgresql start
 
 cd /var/jibiki_deps || return 1
-wget https://github.com/aehlke/jlpt-classifier/blob/master/jlpt-n1.csv
-wget https://github.com/aehlke/jlpt-classifier/blob/master/jlpt-n2.csv
-wget https://github.com/aehlke/jlpt-classifier/blob/master/jlpt-n3.csv
-wget https://github.com/aehlke/jlpt-classifier/blob/master/jlpt-n4.csv
-wget https://github.com/aehlke/jlpt-classifier/blob/master/jlpt-n5.csv
+wget https://raw.githubusercontent.com/aehlke/jlpt-classifier/master/jlpt-n1.csv
+wget https://raw.githubusercontent.com/aehlke/jlpt-classifier/master/jlpt-n2.csv
+wget https://raw.githubusercontent.com/aehlke/jlpt-classifier/master/jlpt-n3.csv
+wget https://raw.githubusercontent.com/aehlke/jlpt-classifier/master/jlpt-n4.csv
+wget https://raw.githubusercontent.com/aehlke/jlpt-classifier/master/jlpt-n5.csv
 
 psql -U postgres -d jibiki \
   -c "ALTER TABLE entr ADD COLUMN jlpt INTEGER;" \
