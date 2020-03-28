@@ -165,33 +165,29 @@ WHERE TRUE;
 DROP TRIGGER word_trigger ON entr;
 DROP FUNCTION score_word();
 
-CREATE FUNCTION search_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
+CREATE INDEX gloss_replace_index ON gloss (regexp_replace(lower(txt), '\s\(.*\)', ''));
+CREATE INDEX entr_id_text_index ON entr (cast(id as text));
+
+CREATE FUNCTION search_words(query TEXT, japanese TEXT)
     RETURNS SETOF INTEGER
 AS
 $$
-SELECT id
+SELECT entr
+FROM gloss
+WHERE regexp_replace(lower(txt), '\s\(.*\)', '') LIKE '% ' || lower(query) || ' %'
+UNION
+SELECT entr
+FROM kanj
+WHERE txt = query
+UNION
+SELECT entr
+FROM rdng
+WHERE txt IN (hiragana(japanese),
+              katakana(japanese))
+UNION
+SELECT entr.id entr
 FROM entr
-         JOIN (SELECT entr
-               FROM gloss
-               WHERE txt = query
-               UNION
-               SELECT entr
-               FROM kanj
-               WHERE txt = query
-               UNION
-               SELECT entr
-               FROM rdng
-               WHERE txt IN (hiragana(japanese),
-                             katakana(japanese))
-               UNION
-               SELECT entr.id entr
-               FROM entr
-               WHERE entr.id::text = ANY (regexp_split_to_array(query, ','))
-               LIMIT pageSize
-               OFFSET
-               page * pageSize) entries
-              ON entr.id = entries.entr
-ORDER BY score DESC;
+WHERE entr.id::text = ANY (regexp_split_to_array(query, ','))
 $$ LANGUAGE SQL STABLE;
 
 CREATE FUNCTION get_words(query TEXT, japanese TEXT, page INTEGER, pageSize INTEGER)
@@ -200,6 +196,9 @@ AS
 $$
 WITH entries AS (
     SELECT search_words(query, japanese, page, pageSize) entries
+    LIMIT :pageSize
+    OFFSET
+    :page * :pageSize
 ),
      forms AS (
          SELECT rdng.entr id,

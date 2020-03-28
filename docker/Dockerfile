@@ -4,6 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 COPY ./build.sh /var/jibiki_deps/scripts/
 COPY ./tables_readonly.sql /var/jibiki_deps/scripts/
+COPY ./jlpt/* /var/jibiki_deps/
 
 RUN sh /var/jibiki_deps/scripts/build.sh
 
