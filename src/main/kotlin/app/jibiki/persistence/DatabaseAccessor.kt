@@ -1,8 +1,6 @@
 package app.jibiki.persistence
 
-import com.fasterxml.jackson.databind.json.JsonMapper
 import com.moji4j.MojiConverter
-import io.r2dbc.postgresql.codec.Json
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
@@ -18,7 +16,7 @@ class DatabaseAccessor {
 
     fun getAll(query: String, sentenceCount: Int, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(json.json), '[]'::jsonb) json
+SELECT coalesce(jsonb_agg(json.json), '[]'::jsonb)::text json
 FROM (SELECT jsonb_build_object(
                      'word', v_words.json,
                      'kanji',
@@ -56,12 +54,12 @@ FROM (SELECT jsonb_build_object(
                 .bind("sentenceCount", sentenceCount)
                 .fetch()
                 .first()
-                .map { (it["json"] as Json).asString() }
+                .map { it["json"] as String }
     }
 
     fun getWords(query: String, page: Int): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(words.json), '[]'::jsonb) json
+SELECT coalesce(jsonb_agg(words.json), '[]'::jsonb)::text json
 FROM get_words(:query, :japanese, :page, :pageSize) words
         """)
                 .bind("pageSize", pageSize)
@@ -70,7 +68,7 @@ FROM get_words(:query, :japanese, :page, :pageSize) words
                 .bind("japanese", converter.convertRomajiToHiragana(query))
                 .fetch()
                 .first()
-                .map { (it["json"] as Json).asString() }
+                .map { it["json"] as String }
     }
 
     fun getKanji(query: String, page: Int): Mono<String> {
@@ -92,7 +90,7 @@ WITH entries AS (
     WHERE literal = ANY (regexp_split_to_array(:query, ''))
        OR literal = ANY (regexp_split_to_array(:query, ','))
 )
-SELECT coalesce(jsonb_agg(mv_kanji.json), '[]'::jsonb) json
+SELECT coalesce(jsonb_agg(mv_kanji.json), '[]'::jsonb)::text json
 FROM entries
          JOIN mv_kanji
               ON mv_kanji.literal = entries.character
@@ -106,12 +104,12 @@ OFFSET
                 .bind("japanese", converter.convertRomajiToHiragana(query))
                 .fetch()
                 .first()
-                .map { (it["json"] as Json).asString() }
+                .map { it["json"] as String }
     }
 
     fun getSentences(query: String, page: Int, minLength: Int, maxLength: Int, source: String): Mono<String> {
         return client.execute("""
-SELECT coalesce(jsonb_agg(mv_translated_sentences.json), '[]'::jsonb) json
+SELECT coalesce(jsonb_agg(mv_translated_sentences.json), '[]'::jsonb)::text json
 FROM mv_translated_sentences
          JOIN get_sentences(:query, :minLength, :maxLength, :page, :pageSize) entries
               ON mv_translated_sentences.id = entries.entry
@@ -125,7 +123,7 @@ FROM mv_translated_sentences
                 .bind("source", source)
                 .fetch()
                 .first()
-                .map { (it["json"] as Json).asString() }
+                .map { it["json"] as String }
     }
 
     fun createUser(username: String, email: String, password: String): Mono<String> {
@@ -137,7 +135,7 @@ WHERE NOT exists(
     )
 RETURNING jsonb_build_object(
         'snowflake', snowflake
-    ) json
+    )::text json
         """)
                 .bind("snowflake", Snowflake.next().toString())
                 .bind("email", email)
@@ -145,7 +143,7 @@ RETURNING jsonb_build_object(
                 .bind("username", username)
                 .fetch()
                 .first()
-                .map { (it["json"] as Json).asString() }
+                .map { it["json"] as String }
     }
 
     fun createToken(email: String, password: String): Mono<String> {
@@ -187,7 +185,7 @@ SELECT jsonb_build_object(
                        'kanji', coalesce(jsonb_agg(b.bookmark) FILTER (WHERE b.type = 1), '[]'::jsonb),
                        'sentences', coalesce(jsonb_agg(b.bookmark) FILTER (WHERE b.type = 2), '[]'::jsonb)
                    )
-           ) json
+           )::text json
 FROM users
          LEFT JOIN bookmarks b on users.snowflake = b.snowflake
 WHERE users.snowflake = (SELECT snowflake FROM userTokens WHERE token = :token)
@@ -196,7 +194,7 @@ GROUP BY users.snowflake
                 .bind("token", token)
                 .fetch()
                 .first()
-                .map { (it["json"] as Json).asString() }
+                .map { it["json"] as String }
     }
 
     fun createBookmark(token: String, type: Int, bookmark: Int): Mono<Int> {
