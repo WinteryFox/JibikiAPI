@@ -1,6 +1,8 @@
 [![Jibiki](https://img.shields.io/discord/635150469664210996.svg?color=7289da&label=Jibiki&logo=discord&style=flat-square)](https://discord.gg/635150469664210996)
 [![CircleCI](https://circleci.com/gh/WinteryFox/JibikiAPI.svg?style=svg)](https://circleci.com/gh/WinteryFox/JibikiAPI)
 
+<img align="right" width=27% alt="Branding icon" src="https://jibiki.app/logo_circle.png">
+
 # Jibiki
 
 [Jibiki](https://jibiki.app/) is a fast and reliable open-source dictionary website and app,
